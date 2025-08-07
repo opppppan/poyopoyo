@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RPG Demo</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mini RPG</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="startScreen">
-    <h1>Welcome to the World</h1>
-    <input type="text" id="playerNameInput" placeholder="Your name">
+    <h1>RPG: NAME ENTRY</h1>
+    <input id="playerName" placeholder="Your name..." />
     <button id="startBtn">Start</button>
   </div>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <div id="dialogBox" class="hidden"></div>
+
+  <div id="gameScreen" class="hidden">
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
