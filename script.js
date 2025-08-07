@@ -1,82 +1,73 @@
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+let player = { x: 0, y: 0 };
+let playerName = "";
+let currentMap = "normal";
+const tileSize = 64;
 
-const tileSize = 32;
-const mapWidth = 10;
-const mapHeight = 10;
-
-let player = {
-  x: 1,
-  y: 1,
-  name: "",
-};
-
-const map = [
-  [1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,0,0,1],
-  [1,0,1,0,1,1,0,1,0,1],
-  [1,0,0,0,0,0,0,1,0,1],
-  [1,0,1,0,1,0,0,0,0,1],
-  [1,0,1,0,1,1,1,1,0,1],
-  [1,0,0,0,0,0,0,0,0,1],
-  [1,0,1,1,1,0,1,1,0,1],
-  [1,0,0,0,0,0,0,0,0,1],
-  [1,1,1,1,1,1,1,1,1,1],
+const npcs = [
+  { x: 2, y: 2, message: "ここはお寿司村です。" },
+  { x: 4, y: 3, message: "🦀に近づかない方がいいよ…" }
 ];
 
-function drawMap() {
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      const tile = map[y][x];
-      ctx.fillStyle = tile === 1 ? "#444" : "#ccc";
-      ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+const bugTile = { x: 7, y: 7 };
+
+function startGame() {
+  playerName = document.getElementById("playerName").value || "SUSHI";
+  document.getElementById("startScreen").style.display = "none";
+  canvas.style.display = "block";
+  draw();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // グリッチ背景
+  if (currentMap === "bug") {
+    for (let i = 0; i < 64; i++) {
+      ctx.fillStyle = `hsl(${Math.random() * 360}, 100%, 50%)`;
+      ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 4, 4);
+    }
+  } else {
+    ctx.fillStyle = "#999";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // NPC
+  ctx.font = "24px sans-serif";
+  ctx.fillStyle = "#fff";
+  for (let npc of npcs) {
+    ctx.fillText("👤", npc.x * tileSize, (npc.y + 1) * tileSize);
+  }
+
+  // 🦀バグトリガー
+  ctx.fillText("🦀", bugTile.x * tileSize, (bugTile.y + 1) * tileSize);
+
+  // プレイヤー 🍣と名前
+  ctx.fillText("🍣", player.x * tileSize, (player.y + 1) * tileSize);
+  ctx.fillText(playerName, player.x * tileSize, player.y * tileSize - 5);
+}
+
+function move(dir) {
+  if (currentMap === "dialogue") return;
+  const dx = { left: -1, right: 1, up: 0, down: 0 }[dir];
+  const dy = { up: -1, down: 1, left: 0, right: 0 }[dir];
+  player.x += dx;
+  player.y += dy;
+  checkCollision();
+  draw();
+}
+
+function checkCollision() {
+  // NPC会話
+  for (let npc of npcs) {
+    if (npc.x === player.x && npc.y === player.y) {
+      alert(npc.message);
     }
   }
-}
-
-function drawPlayer() {
-  ctx.fillStyle = "#0f0";
-  ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
-  ctx.fillStyle = "#000";
-  ctx.font = "12px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(player.name, player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 1.5);
-}
-
-function render() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawMap();
-  drawPlayer();
-}
-
-function canMove(x, y) {
-  return map[y] && map[y][x] === 0;
-}
-
-document.addEventListener("keydown", (e) => {
-  let newX = player.x;
-  let newY = player.y;
-
-  if (e.key === "ArrowUp") newY--;
-  else if (e.key === "ArrowDown") newY++;
-  else if (e.key === "ArrowLeft") newX--;
-  else if (e.key === "ArrowRight") newX++;
-
-  if (canMove(newX, newY)) {
-    player.x = newX;
-    player.y = newY;
+  // 🦀バグエリア突入
+  if (player.x === bugTile.x && player.y === bugTile.y) {
+    currentMap = "bug";
   }
-
-  render();
-});
-
-document.getElementById("startBtn").addEventListener("click", () => {
-  const name = document.getElementById("playerName").value.trim();
-  if (!name) return;
-  player.name = name;
-
-  document.getElementById("startScreen").classList.add("hidden");
-  document.getElementById("gameScreen").classList.remove("hidden");
-
-  render();
-});
+}
