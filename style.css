@@ -1,31 +1,30 @@
 body {
   margin: 0;
-  padding: 0;
   background: #111;
+  color: #fff;
   font-family: sans-serif;
-  color: white;
+  text-align: center;
+}
+#game-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
   height: 100vh;
 }
-#gameContainer {
-  position: relative;
+#username-screen {
+  margin-top: 20px;
 }
-#gameCanvas {
-  background-color: #888;
+#game-canvas {
+  background: #aaa;
   image-rendering: pixelated;
 }
-#mobileControls {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  display: grid;
-  grid-template-columns: 40px 40px 40px;
-  grid-template-rows: 40px 40px;
-  gap: 5px;
+#controls {
+  margin-top: 10px;
 }
-#mobileControls button {
-  font-size: 20px;
-  padding: 5px;
+#controls button {
+  width: 50px;
+  height: 50px;
+  font-size: 18px;
+  margin: 3px;
 }

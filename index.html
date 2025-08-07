@@ -2,18 +2,23 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sushi RPG</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="gameContainer">
-    <canvas id="gameCanvas" width="640" height="480"></canvas>
-    <div id="mobileControls">
-      <button id="btnUp">▲</button><br />
-      <button id="btnLeft">◀</button>
-      <button id="btnDown">▼</button>
-      <button id="btnRight">▶</button>
+  <div id="game-container">
+    <div id="username-screen">
+      <h1>名前を入力してください</h1>
+      <input type="text" id="username-input" placeholder="SUSHI" />
+      <button id="start-btn">スタート</button>
+    </div>
+    <canvas id="game-canvas"></canvas>
+    <div id="controls">
+      <button id="btn-up">▲</button><br />
+      <button id="btn-left">◀</button>
+      <button id="btn-down">▼</button>
+      <button id="btn-right">▶</button>
     </div>
   </div>
   <script src="script.js"></script>

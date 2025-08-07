@@ -1,128 +1,118 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("game-canvas");
+const ctx = canvas.getContext("2d");
+canvas.width = 512;
+canvas.height = 512;
+const tileSize = 32;
+let username = "🍣";
+let showUsername = false;
+let gameStarted = false;
 
-const TILE_SIZE = 40;
-const MAP_COLS = 16;
-const MAP_ROWS = 12;
-
-const PLAYER_SPEED = 5;
-
-let playerName = prompt("プレイヤー名を入力してください") || "🍣";
-let player = {
-  x: 1,
-  y: 1,
-  name: playerName,
-};
-
-const npcs = [
-  { x: 5, y: 3, text: "ぱやぱや", dir: 1 },
-  { x: 10, y: 7, text: "ぽよぽよ", dir: -1 },
+const map = [
+  "################",
+  "#     #        #",
+  "# ### # ###### #",
+  "# #   #      # #",
+  "# # ####### ## #",
+  "# #       #    #",
+  "# ###### #######",
+  "#    #         #",
+  "#### ######### #",
+  "#    #     🦀  #",
+  "################"
 ];
 
-const crab = { x: 14, y: 10 };
+const player = { x: 1, y: 1 };
+let npcs = [
+  { x: 4, y: 2, emoji: "🧍", message: "ぱやぱや", dx: 1 },
+  { x: 10, y: 5, emoji: "🧍", message: "ぽよぽよ", dx: -1 }
+];
+let keys = {};
 
-let map = [];
-let inBugArea = false;
-let moveInterval;
-let keyState = {};
+document.getElementById("start-btn").onclick = () => {
+  const input = document.getElementById("username-input").value.trim();
+  if (input) username = input;
+  showUsername = true;
+  document.getElementById("username-screen").style.display = "none";
+  gameStarted = true;
+  requestAnimationFrame(gameLoop);
+};
 
-function generateMap() {
-  map = [];
-  for (let y = 0; y < MAP_ROWS; y++) {
-    const row = [];
-    for (let x = 0; x < MAP_COLS; x++) {
-      if (y === 0 || y === MAP_ROWS - 1 || x === 0 || x === MAP_COLS - 1 || (Math.random() < 0.15 && !(x === 1 && y === 1)))
-        row.push(1);
-      else
-        row.push(0);
+document.addEventListener("keydown", (e) => {
+  keys[e.key] = true;
+});
+
+document.addEventListener("keyup", (e) => {
+  keys[e.key] = false;
+});
+
+document.getElementById("btn-up").addEventListener("touchstart", () => keys["ArrowUp"] = true);
+document.getElementById("btn-up").addEventListener("touchend", () => keys["ArrowUp"] = false);
+document.getElementById("btn-down").addEventListener("touchstart", () => keys["ArrowDown"] = true);
+document.getElementById("btn-down").addEventListener("touchend", () => keys["ArrowDown"] = false);
+document.getElementById("btn-left").addEventListener("touchstart", () => keys["ArrowLeft"] = true);
+document.getElementById("btn-left").addEventListener("touchend", () => keys["ArrowLeft"] = false);
+document.getElementById("btn-right").addEventListener("touchstart", () => keys["ArrowRight"] = true);
+document.getElementById("btn-right").addEventListener("touchend", () => keys["ArrowRight"] = false);
+
+function canMove(x, y) {
+  const cell = map[y][x];
+  return cell !== "#" && !npcs.some(npc => npc.x === x && npc.y === y);
+}
+
+function gameLoop() {
+  update();
+  draw();
+  if (gameStarted) requestAnimationFrame(gameLoop);
+}
+
+function update() {
+  if (keys["ArrowUp"] && canMove(player.x, player.y - 1)) player.y--;
+  if (keys["ArrowDown"] && canMove(player.x, player.y + 1)) player.y++;
+  if (keys["ArrowLeft"] && canMove(player.x - 1, player.y)) player.x--;
+  if (keys["ArrowRight"] && canMove(player.x + 1, player.y)) player.x++;
+
+  npcs.forEach(npc => {
+    const nextX = npc.x + npc.dx;
+    if (map[npc.y][nextX] === " " && !npcs.some(n => n !== npc && n.x === nextX && n.y === npc.y)) {
+      npc.x = nextX;
+    } else {
+      npc.dx *= -1;
     }
-    map.push(row);
-  }
-  // Reserve NPC and crab positions
-  npcs.forEach(npc => map[npc.y][npc.x] = 2);
-  map[crab.y][crab.x] = 3;
+  });
+
+  npcs.forEach(npc => {
+    if (npc.x === player.x && npc.y === player.y) {
+      alert(npc.message);
+    }
+  });
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (inBugArea) ctx.filter = 'invert(1)';
-
-  for (let y = 0; y < MAP_ROWS; y++) {
-    for (let x = 0; x < MAP_COLS; x++) {
-      if (map[y][x] === 1) {
-        ctx.fillStyle = '#444';
-        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+  for (let y = 0; y < map.length; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      const cell = map[y][x];
+      if (cell === "#") {
+        ctx.fillStyle = "#444";
+        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+      } else if (cell === "🦀") {
+        ctx.font = "28px sans-serif";
+        ctx.fillText("🦀", x * tileSize + 4, y * tileSize + 28);
       }
     }
   }
 
   npcs.forEach(npc => {
-    ctx.fillText("👤", npc.x * TILE_SIZE + 10, npc.y * TILE_SIZE + 30);
+    ctx.font = "28px sans-serif";
+    ctx.fillText(npc.emoji, npc.x * tileSize + 4, npc.y * tileSize + 28);
   });
 
-  ctx.fillText("🦀", crab.x * TILE_SIZE + 10, crab.y * TILE_SIZE + 30);
+  ctx.font = "28px sans-serif";
+  ctx.fillText("🍣", player.x * tileSize + 4, player.y * tileSize + 28);
 
-  ctx.fillText("🍣", player.x * TILE_SIZE + 10, player.y * TILE_SIZE + 30);
-  ctx.fillStyle = "white";
-  ctx.fillText(player.name, player.x * TILE_SIZE + 5, player.y * TILE_SIZE - 5);
-
-  ctx.filter = 'none';
-}
-
-function canMove(x, y) {
-  return map[y][x] === 0;
-}
-
-function movePlayer(dx, dy) {
-  const newX = player.x + dx;
-  const newY = player.y + dy;
-
-  if (!canMove(newX, newY)) return;
-
-  // Check NPC collision
-  for (let npc of npcs) {
-    if (npc.x === newX && npc.y === newY) {
-      alert(npc.text);
-      return;
-    }
-  }
-
-  // Move
-  player.x = newX;
-  player.y = newY;
-
-  // Check crab for bug zone
-  if (player.x === crab.x && player.y === crab.y) {
-    inBugArea = true;
-    setTimeout(() => inBugArea = false, 8000);
-  }
-
-  draw();
-}
-
-function handleKey(e) {
-  switch (e.key) {
-    case 'ArrowUp': movePlayer(0, -1); break;
-    case 'ArrowDown': movePlayer(0, 1); break;
-    case 'ArrowLeft': movePlayer(-1, 0); break;
-    case 'ArrowRight': movePlayer(1, 0); break;
+  if (showUsername) {
+    ctx.font = "16px sans-serif";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(username, player.x * tileSize, player.y * tileSize - 5);
   }
 }
-
-function handleButton(dir) {
-  switch (dir) {
-    case 'up': movePlayer(0, -1); break;
-    case 'down': movePlayer(0, 1); break;
-    case 'left': movePlayer(-1, 0); break;
-    case 'right': movePlayer(1, 0); break;
-  }
-}
-
-document.addEventListener('keydown', handleKey);
-document.getElementById('btnUp').addEventListener('click', () => handleButton('up'));
-document.getElementById('btnDown').addEventListener('click', () => handleButton('down'));
-document.getElementById('btnLeft').addEventListener('click', () => handleButton('left'));
-document.getElementById('btnRight').addEventListener('click', () => handleButton('right'));
-
-generateMap();
-draw();
