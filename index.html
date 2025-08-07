@@ -1,24 +1,20 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sushi RPG</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SUSHI RPG</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="startScreen">
-    <h1>SUSHI RPG</h1>
-    <input type="text" id="playerName" placeholder="名前を入力（例: SUSHI）" />
-    <button onclick="startGame()">START</button>
-  </div>
-  <canvas id="gameCanvas" width="512" height="512"></canvas>
-  <div id="controls">
-    <button onclick="move('up')">▲</button><br/>
-    <button onclick="move('left')">◀</button>
-    <button onclick="move('down')">▼</button>
-    <button onclick="move('right')">▶</button>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="640" height="640"></canvas>
+    <div id="touchControls">
+      <button id="btnUp">▲</button><br>
+      <button id="btnLeft">◀</button>
+      <button id="btnDown">▼</button>
+      <button id="btnRight">▶</button>
+    </div>
   </div>
   <script src="script.js"></script>
 </body>

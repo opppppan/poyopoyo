@@ -1,27 +1,27 @@
-
 body {
   margin: 0;
   background: #111;
-  color: white;
+  color: #fff;
   font-family: sans-serif;
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
 }
-
-#startScreen {
-  margin-top: 100px;
+#gameContainer {
+  position: relative;
 }
-
 #gameCanvas {
-  background: #444;
-  display: none;
+  background: #999;
+  display: block;
 }
-
-#controls {
-  margin-top: 10px;
+#touchControls {
+  position: absolute;
+  bottom: 10px;
+  right: -100px;
 }
-
-button {
-  font-size: 20px;
-  padding: 10px 20px;
-  margin: 5px;
+#touchControls button {
+  font-size: 24px;
+  padding: 10px;
+  margin: 2px;
 }
