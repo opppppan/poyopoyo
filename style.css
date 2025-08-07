@@ -1,27 +1,32 @@
 body {
   margin: 0;
   background: #111;
-  color: #fff;
-  font-family: sans-serif;
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
 }
-#gameContainer {
+
+#game-container {
   position: relative;
 }
+
 #gameCanvas {
-  background: #999;
   display: block;
+  background: #aaa;
+  image-rendering: pixelated;
 }
-#touchControls {
+
+#controls {
   position: absolute;
-  bottom: 10px;
-  right: -100px;
+  bottom: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
 }
-#touchControls button {
+
+#controls button {
   font-size: 24px;
   padding: 10px;
-  margin: 2px;
 }
