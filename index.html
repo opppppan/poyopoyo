@@ -266,6 +266,52 @@
 
   #progress { position:fixed; top:0; left:0; height:2px; background:rgba(255,255,255,0.35); z-index:900; width:0%; }
 
+  /* ---- スマホ対応 ---- */
+  @media (max-width: 640px) or (orientation: portrait) {
+    #header { padding: 8px 16px; }
+    #title  { font-size: 14px; letter-spacing: 4px; }
+    #score  { font-size: 22px; }
+    #combo  { font-size: 11px; }
+
+    #game { flex-direction: column; }
+
+    #stage {
+      flex: 0 0 auto;
+      height: 160px;
+      padding-bottom: 10px;
+    }
+    #stage::before { width: 200px; height: 100px; }
+
+    #character-wrap canvas { width: auto; height: 100px; }
+
+    #lanes {
+      width: 100%;
+      flex: 1;
+      border-left: none;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .hit-zone { width: 58px; height: 58px; bottom: 50px; }
+
+    .note { width: 50px; height: 50px; margin-left: -25px; }
+
+    .hit-burst { width: 58px; height: 58px; bottom: 50px; }
+
+    .key-label { display: none; }
+
+    #accuracy-bar { margin: 4px auto; }
+    #stats { padding: 4px 8px 6px; font-size: 9px; }
+    .stat-val { font-size: 12px; }
+
+    .overlay-big { font-size: 36px; }
+    .start-btn { font-size: 12px; padding: 12px 32px; }
+
+    #result-score { font-size: 48px; }
+    #result-grade { font-size: 24px; }
+
+    #keyboard-hint { display: none; }
+  }
+
   /* ---- Overlays ---- */
   #overlay { position:fixed; inset:0; background:rgba(10,10,15,.95); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:500; gap:20px; }
   #overlay.hidden { display:none; }
@@ -297,7 +343,7 @@
     <p class="overlay-sub">RHYTHM GAME</p>
     <br>
     <button class="start-btn" id="start-btn">START</button>
-    <p style="font-size:10px;color:#333;letter-spacing:3px;margin-top:16px;">← ↓ ↑ →  /  D F J K</p>
+    <p id="keyboard-hint" style="font-size:10px;color:#333;letter-spacing:3px;margin-top:16px;">← ↓ ↑ →  /  D F J K</p>
   </div>
   <div id="result-screen" style="display:none;flex-direction:column;align-items:center;gap:16px;">
     <p class="overlay-title">RESULT</p>
@@ -796,6 +842,26 @@ document.getElementById('retry-btn').addEventListener('click', () => {
   document.getElementById('result-screen').style.display = 'none';
   document.getElementById('start-screen').style.display  = 'block';
   startGame();
+});
+
+// ============================================================
+// タッチ入力
+// ============================================================
+[0,1,2,3].forEach(i => {
+  laneEls[i].addEventListener('touchstart', e => {
+    e.preventDefault();
+    pressLane(i);
+  }, { passive: false });
+});
+
+// スクロール・ズーム防止
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+// スタート画面をタップしてもゲーム開始できるように
+document.getElementById('overlay').addEventListener('touchend', e => {
+  // ボタン以外の場所をタップした場合は何もしない（ボタンのclickで処理）
+  e.stopPropagation();
 });
 
 // ============================================================
