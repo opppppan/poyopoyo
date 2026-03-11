@@ -1,26 +1,950 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sushi RPG</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DANCE GAME</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  #header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 30px;
+    background: rgba(0,0,0,0.6);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  #title { font-size: 18px; letter-spacing: 6px; color: #ccc; font-weight: bold; }
+  #score { font-size: 28px; color: #fff; font-weight: bold; letter-spacing: 2px; }
+  #combo { font-size: 13px; color: #888; letter-spacing: 3px; margin-top: 2px; }
+  #combo.active { color: #fff; }
+
+  #game {
+    display: flex;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    position: relative;
+  }
+
+  /* ---- Stage ---- */
+  #stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #stage::before {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 400px; height: 200px;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.04) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  #stage::after {
+    content: '';
+    position: absolute;
+    bottom: 80px; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  }
+
+  #character-wrap {
+    position: relative;
+    z-index: 2;
+    transform-origin: bottom center;
+    will-change: transform;
+  }
+
+  /* ---- ピクセルアート キャラクター ---- */
+  #character {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+    filter: drop-shadow(0 6px 20px rgba(255,255,255,0.14));
+  }
+  #overlay-char-slot canvas, #result-char-slot canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+  #overlay-char-slot { filter: drop-shadow(0 0 20px rgba(255,255,255,0.1)); animation: idleBob 0.44s steps(1,end) alternate infinite; }
+  #result-char-slot  { filter: drop-shadow(0 0 14px rgba(255,255,255,0.08)); }
+
+  /* 8bit 2フレーム バウンス */
+  #character-wrap.idle { animation: idleBob 0.22s steps(1,end) alternate infinite; }
+  @keyframes idleBob {
+    from { transform: translateY(0px); }
+    to   { transform: translateY(-4px); }
+  }
+  #character-wrap.pose-left  { animation: poseLeft  0.38s cubic-bezier(.1,.9,.3,1) forwards; }
+  #character-wrap.pose-right { animation: poseRight 0.38s cubic-bezier(.1,.9,.3,1) forwards; }
+  #character-wrap.pose-down  { animation: poseDown  0.38s cubic-bezier(.1,.9,.3,1) forwards; }
+  #character-wrap.pose-up    { animation: poseUp    0.38s cubic-bezier(.1,.9,.3,1) forwards; }
+  #character-wrap.pose-miss  { animation: poseMiss  0.42s ease forwards; }
+
+  @keyframes poseLeft {
+    0%  { transform: rotate(0)       translateX(0)    scale(1); }
+    12% { transform: rotate(-26deg)  translateX(-28px) scale(.84); }
+    30% { transform: rotate(-18deg)  translateX(-20px) scale(.9); }
+    55% { transform: rotate(-22deg)  translateX(-24px) scale(.87); }
+    100%{ transform: rotate(0)       translateX(0)    scale(1); }
+  }
+  @keyframes poseRight {
+    0%  { transform: rotate(0)      translateX(0)    scale(1); }
+    12% { transform: rotate(26deg)  translateX(28px) scale(.84); }
+    30% { transform: rotate(18deg)  translateX(20px) scale(.9); }
+    55% { transform: rotate(22deg)  translateX(24px) scale(.87); }
+    100%{ transform: rotate(0)      translateX(0)    scale(1); }
+  }
+  @keyframes poseDown {
+    0%  { transform: scaleY(1)    translateY(0)    scaleX(1); }
+    12% { transform: scaleY(.68)  translateY(30px) scaleX(1.22); }
+    30% { transform: scaleY(.82)  translateY(18px) scaleX(1.10); }
+    55% { transform: scaleY(.74)  translateY(26px) scaleX(1.16); }
+    100%{ transform: scaleY(1)    translateY(0)    scaleX(1); }
+  }
+  @keyframes poseUp {
+    0%  { transform: scaleY(1)    translateY(0)     scaleX(1); }
+    12% { transform: scaleY(1.22) translateY(-32px) scaleX(.82); }
+    30% { transform: scaleY(1.10) translateY(-20px) scaleX(.90); }
+    55% { transform: scaleY(1.16) translateY(-28px) scaleX(.85); }
+    100%{ transform: scaleY(1)    translateY(0)     scaleX(1); }
+  }
+  @keyframes poseMiss {
+    0%  { transform: rotate(0)     scale(1); }
+    10% { transform: rotate(-14deg) scale(1.10); }
+    22% { transform: rotate(14deg)  scale(1.10); }
+    34% { transform: rotate(-10deg) scale(1.05); }
+    46% { transform: rotate(8deg)   scale(1.03); }
+    60% { transform: rotate(-4deg)  scale(1.01); }
+    100%{ transform: rotate(0)     scale(1); }
+  }
+
+  #judgment {
+    position: absolute;
+    top: 38%; left: 50%; transform: translateX(-50%);
+    font-size: 20px; font-weight: bold; letter-spacing: 5px;
+    pointer-events: none; opacity: 0; z-index: 20;
+  }
+  #judgment.show { animation: judgeFade 0.45s ease forwards; }
+  @keyframes judgeFade {
+    0%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.1); }
+    55%  { opacity: 1; transform: translateX(-50%) translateY(-10px) scale(1); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(.9); }
+  }
+
+  /* ---- Lane panel ---- */
+  #lanes {
+    width: 280px;
+    background: rgba(0,0,0,0.5);
+    border-left: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  #lane-label { font-size: 10px; letter-spacing: 4px; color: #444; padding: 12px 0 8px; }
+
+  #lane-container {
+    flex: 1;
+    width: 100%;
+    position: relative;
+    display: flex;
+    min-height: 0;
+  }
+
+  .lane {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  .lane + .lane { border-left: 1px solid rgba(255,255,255,0.04); }
+
+  .hit-zone {
+    position: absolute;
+    bottom: 60px; left: 50%; transform: translateX(-50%);
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.03);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 5;
+    transition: background 0.07s, border-color 0.07s;
+  }
+  .hit-zone-key { font-size: 13px; color: rgba(255,255,255,0.4); font-weight: bold; }
+  .key-label { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 9px; color: #333; letter-spacing: 2px; white-space: nowrap; }
+
+  /* lane colors */
+  .lane-0 .hit-zone { border-color: rgba(120,160,255,0.3); }
+  .lane-1 .hit-zone { border-color: rgba(80,200,120,0.3); }
+  .lane-2 .hit-zone { border-color: rgba(255,140,80,0.3); }
+  .lane-3 .hit-zone { border-color: rgba(220,80,160,0.3); }
+
+  .lane-0 .hit-zone.pressed { background:rgba(120,160,255,0.2); border-color:rgba(160,200,255,0.9); box-shadow:0 0 20px rgba(120,160,255,0.4); }
+  .lane-1 .hit-zone.pressed { background:rgba(80,200,120,0.2);  border-color:rgba(150,230,170,0.9); box-shadow:0 0 20px rgba(80,200,120,0.4); }
+  .lane-2 .hit-zone.pressed { background:rgba(255,140,80,0.2);  border-color:rgba(255,180,140,0.9); box-shadow:0 0 20px rgba(255,140,80,0.4); }
+  .lane-3 .hit-zone.pressed { background:rgba(220,80,160,0.2);  border-color:rgba(255,150,200,0.9); box-shadow:0 0 20px rgba(220,80,160,0.4); }
+
+  /* notes — use transform:translateY instead of top for GPU compositing */
+  .note {
+    position: absolute;
+    width: 44px; height: 44px; border-radius: 50%;
+    left: 50%; margin-left: -22px;
+    top: 0;
+    will-change: transform;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .lane-0 .note { background:radial-gradient(circle at 35% 35%,rgba(180,200,255,.95),rgba(100,140,255,.4)); border:2px solid rgba(160,180,255,.7); box-shadow:0 0 12px rgba(120,160,255,.5); }
+  .lane-1 .note { background:radial-gradient(circle at 35% 35%,rgba(200,255,210,.95),rgba(80,200,120,.4));  border:2px solid rgba(150,230,170,.7); box-shadow:0 0 12px rgba(80,200,120,.5); }
+  .lane-2 .note { background:radial-gradient(circle at 35% 35%,rgba(255,210,180,.95),rgba(255,140,80,.4));  border:2px solid rgba(255,180,140,.7); box-shadow:0 0 12px rgba(255,140,80,.5); }
+  .lane-3 .note { background:radial-gradient(circle at 35% 35%,rgba(255,180,230,.95),rgba(220,80,160,.4));  border:2px solid rgba(255,150,200,.7); box-shadow:0 0 12px rgba(220,80,160,.5); }
+
+  .hit-burst {
+    position: absolute;
+    bottom: 60px; left: 50%; transform: translate(-50%, 50%);
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.8);
+    pointer-events: none; z-index: 6;
+    animation: burst 0.3s ease forwards;
+  }
+  @keyframes burst { 0%{transform:translate(-50%,50%)scale(1);opacity:.9} 100%{transform:translate(-50%,50%)scale(2.2);opacity:0} }
+
+  .miss-flash {
+    position: absolute; inset: 0;
+    background: rgba(255,50,50,0.1);
+    pointer-events: none; z-index: 10;
+    animation: mf 0.28s ease forwards;
+  }
+  @keyframes mf { 0%{opacity:1} 100%{opacity:0} }
+
+  #accuracy-bar { width: 90%; margin: 8px auto; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+  #accuracy-fill { height: 100%; background: rgba(255,255,255,0.5); border-radius: 2px; transition: width 0.4s; width: 100%; }
+
+  #stats { display:flex; justify-content:space-around; width:100%; padding:6px 10px 10px; font-size:10px; color:#444; letter-spacing:2px; }
+  .stat-val { color:#888; font-size:13px; display:block; text-align:center; }
+
+  #bpm-dot { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:4px; height:4px; border-radius:50%; background:rgba(255,255,255,.3); pointer-events:none; }
+  #bpm-dot.pulse { animation: bpmP 0.1s ease forwards; }
+  @keyframes bpmP { 0%{transform:translate(-50%,-50%)scale(1);opacity:1} 100%{transform:translate(-50%,-50%)scale(3);opacity:0} }
+
+  #progress { position:fixed; top:0; left:0; height:2px; background:rgba(255,255,255,0.35); z-index:900; width:0%; }
+
+  /* ---- Overlays ---- */
+  #overlay { position:fixed; inset:0; background:rgba(10,10,15,.95); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:500; gap:20px; }
+  #overlay.hidden { display:none; }
+
+  .overlay-title { font-size:11px; letter-spacing:8px; color:#555; }
+  .overlay-big   { font-size:48px; font-weight:bold; letter-spacing:6px; color:#fff; }
+  .overlay-sub   { font-size:12px; color:#555; letter-spacing:4px; margin-top:-10px; }
+
+  #overlay-char-slot { filter:drop-shadow(0 0 28px rgba(255,255,255,.1)); animation:idleBob .94s ease-in-out infinite; }
+  #result-char-slot  { filter:drop-shadow(0 0 18px rgba(255,255,255,.08)); }
+
+  .start-btn { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2); color:#ccc; font-family:'Courier New',monospace; font-size:13px; letter-spacing:5px; padding:14px 40px; cursor:pointer; transition:all .15s; }
+  .start-btn:hover { background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.5); color:#fff; }
+
+  #result-score { font-size:64px; font-weight:bold; color:#fff; letter-spacing:4px; }
+  #result-grade { font-size:32px; letter-spacing:6px; color:#aaa; margin-top:-10px; }
+  #result-stats { font-size:12px; color:#555; letter-spacing:3px; line-height:2; text-align:center; }
+</style>
 </head>
 <body>
-  <div id="game-container">
-    <div id="username-screen">
-      <h1>名前を入力してください</h1>
-      <input type="text" id="username-input" placeholder="SUSHI" />
-      <button id="start-btn">スタート</button>
-    </div>
-    <canvas id="game-canvas"></canvas>
-    <div id="controls">
-      <button id="btn-up">▲</button><br />
-      <button id="btn-left">◀</button>
-      <button id="btn-down">▼</button>
-      <button id="btn-right">▶</button>
+
+<div id="progress"></div>
+
+<div id="overlay">
+  <div id="start-screen">
+    <p class="overlay-title">PRESS START</p>
+    <div id="overlay-char-slot"></div>
+    <p class="overlay-big">DANCE</p>
+    <p class="overlay-sub">RHYTHM GAME</p>
+    <br>
+    <button class="start-btn" id="start-btn">START</button>
+    <p style="font-size:10px;color:#333;letter-spacing:3px;margin-top:16px;">← ↓ ↑ →  /  D F J K</p>
+  </div>
+  <div id="result-screen" style="display:none;flex-direction:column;align-items:center;gap:16px;">
+    <p class="overlay-title">RESULT</p>
+    <div id="result-char-slot"></div>
+    <div id="result-score">0</div>
+    <div id="result-grade">—</div>
+    <div id="result-stats"></div>
+    <button class="start-btn" id="retry-btn">RETRY</button>
+  </div>
+</div>
+
+<div id="header">
+  <div id="title">DANCE</div>
+  <div>
+    <div id="score">0</div>
+    <div id="combo">COMBO × 0</div>
+  </div>
+</div>
+
+<div id="game">
+  <div id="stage">
+    <div id="bpm-dot"></div>
+    <div id="judgment"></div>
+    <div id="character-wrap" class="idle">
+      <canvas id="character"></canvas>
     </div>
   </div>
-  <script src="script.js"></script>
+
+  <div id="lanes">
+    <p id="lane-label">NOTES</p>
+    <div id="lane-container">
+      <div class="lane lane-0" id="lane-0"><div class="hit-zone" id="hz-0"><span class="hit-zone-key">←</span></div><span class="key-label">D</span></div>
+      <div class="lane lane-1" id="lane-1"><div class="hit-zone" id="hz-1"><span class="hit-zone-key">↓</span></div><span class="key-label">F</span></div>
+      <div class="lane lane-2" id="lane-2"><div class="hit-zone" id="hz-2"><span class="hit-zone-key">↑</span></div><span class="key-label">J</span></div>
+      <div class="lane lane-3" id="lane-3"><div class="hit-zone" id="hz-3"><span class="hit-zone-key">→</span></div><span class="key-label">K</span></div>
+    </div>
+    <div id="accuracy-bar"><div id="accuracy-fill"></div></div>
+    <div id="stats">
+      <div><span class="stat-val" id="st-p">0</span>PERFECT</div>
+      <div><span class="stat-val" id="st-g">0</span>GOOD</div>
+      <div><span class="stat-val" id="st-m">0</span>MISS</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// AUDIO — lookahead scheduler (never creates all nodes at once)
+// ============================================================
+const BPM  = 128;
+const BEAT = 60 / BPM;      // ~0.469 s
+const BAR  = BEAT * 4;
+
+let audioCtx = null;
+let schedulerTimer = null;
+let nextBarTime = 0;
+let scheduledBar = 0;
+let totalBars = 0;
+
+const SCHEDULE_AHEAD = 0.3;   // schedule up to 300ms ahead
+const SCHEDULER_MS   = 100;   // check every 100ms
+
+function noise(ctx) {
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource();
+  s.buffer = buf;
+  return s;
+}
+
+function kick(t) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.setValueAtTime(150, t);
+  o.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+  g.gain.setValueAtTime(1.1, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  o.start(t); o.stop(t + 0.3);
+}
+
+function snare(t) {
+  const n = noise(audioCtx);
+  const f = audioCtx.createBiquadFilter();
+  const g = audioCtx.createGain();
+  f.type = 'bandpass'; f.frequency.value = 2000; f.Q.value = 0.5;
+  n.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(0.55, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  n.start(t); n.stop(t + 0.1);
+}
+
+function hihat(t, open) {
+  const n = noise(audioCtx);
+  const f = audioCtx.createBiquadFilter();
+  const g = audioCtx.createGain();
+  f.type = 'highpass'; f.frequency.value = 8000;
+  n.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  const dur = open ? 0.2 : 0.04;
+  g.gain.setValueAtTime(0.22, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  n.start(t); n.stop(t + dur);
+}
+
+function bass(t, freq, dur) {
+  const o = audioCtx.createOscillator();
+  const f = audioCtx.createBiquadFilter();
+  const g = audioCtx.createGain();
+  o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 500;
+  o.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.38, t);
+  g.gain.setValueAtTime(0.38, t + dur - 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.start(t); o.stop(t + dur);
+}
+
+function synth(t, freq) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'square';
+  o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.07, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + BEAT * 0.1);
+  o.start(t); o.stop(t + BEAT * 0.1);
+}
+
+const s16 = BEAT / 4;
+
+const BASS_PAT = [
+  {step:0,freq:65.4,dur:BEAT*.8},{step:2,freq:65.4,dur:BEAT*.4},
+  {step:3,freq:73.4,dur:BEAT*.4},{step:4,freq:87.3,dur:BEAT*.4},
+  {step:6,freq:65.4,dur:BEAT*.4},{step:8,freq:65.4,dur:BEAT*.8},
+  {step:10,freq:58.3,dur:BEAT*.4},{step:12,freq:65.4,dur:BEAT*.4},
+  {step:14,freq:98,dur:BEAT*.4},
+];
+const SYNTH_PAT = [
+  {step:0,freq:523.3},{step:2,freq:587.3},{step:3,freq:659.3},{step:4,freq:698.5},
+  {step:6,freq:659.3},{step:8,freq:523.3},{step:10,freq:466.2},
+  {step:12,freq:392},{step:14,freq:349.2},
+];
+
+function scheduleBar(t) {
+  // Drums
+  [0,3,8,12,14].forEach(st => kick(t + st * s16));
+  [4,12].forEach(st => snare(t + st * s16));
+  for (let st = 0; st < 16; st += 2) hihat(t + st * s16, st === 4 || st === 12);
+  // Bass & synth
+  BASS_PAT.forEach(n  => bass(t + n.step * s16, n.freq, n.dur));
+  SYNTH_PAT.forEach(n => synth(t + n.step * s16, n.freq));
+}
+
+function runScheduler() {
+  while (nextBarTime < audioCtx.currentTime + SCHEDULE_AHEAD && scheduledBar < totalBars) {
+    scheduleBar(nextBarTime);
+    nextBarTime += BAR;
+    scheduledBar++;
+  }
+  if (scheduledBar < totalBars) {
+    schedulerTimer = setTimeout(runScheduler, SCHEDULER_MS);
+  }
+}
+
+function startMusic(songDur, t0) {
+  totalBars    = Math.ceil(songDur / BAR);
+  nextBarTime  = t0;
+  scheduledBar = 0;
+  runScheduler();
+}
+
+function stopMusic() {
+  clearTimeout(schedulerTimer);
+}
+
+// ============================================================
+// NOTE CHART
+// ============================================================
+function generateChart(songDur) {
+  const notes = [];
+  const totalBars2 = Math.floor(songDur / BAR);
+
+  // 音楽のキック(step0,8)・スネア(step4,12)に合わせた4拍ベースパターン
+  // step0=拍1(キック), step4=拍2(スネア), step8=拍3(キック), step12=拍4(スネア)
+  const beatLanes = [
+    [0,1,2,3],[1,0,3,2],[2,3,0,1],[3,2,1,0],
+    [0,2,1,3],[2,0,3,1],[1,3,0,2],[3,1,2,0],
+  ];
+  // 8分音符追加パターン (step2,6,10,14)
+  const eightLanes = [
+    [2,3],[0,1],[3,2],[1,0],
+    [1,2],[3,0],[0,3],[2,1],
+  ];
+
+  for (let bar = 1; bar < totalBars2; bar++) {
+    const barT = bar * BAR;
+    if (barT >= songDur - 4) break;
+
+    const bp = beatLanes[bar % beatLanes.length];
+    // 4拍 (step 0,4,8,12) = キック・スネア位置
+    [0, 4, 8, 12].forEach((step, bi) => {
+      notes.push({ time: barT + step * s16, lane: bp[bi] });
+    });
+
+    // 後半 (bar>4) は8分音符を部分的に追加
+    if (bar > 4) {
+      const ep = eightLanes[bar % eightLanes.length];
+      // 偶数barは前半2つ, 奇数barは後半2つ
+      const steps = (bar % 2 === 0) ? [2, 6] : [10, 14];
+      steps.forEach((step, ei) => {
+        notes.push({ time: barT + step * s16, lane: ep[ei] });
+      });
+    }
+  }
+  notes.sort((a, b) => a.time - b.time);
+  return notes;
+}
+
+// ============================================================
+// GAME
+// ============================================================
+const SONG_DUR      = 90;
+const NOTE_SPEED    = 340;   // px/s
+const PERFECT_WIN   = 0.065;
+const GOOD_WIN      = 0.130;
+const KEY_MAP       = {
+  ArrowLeft:0, d:0, D:0,
+  ArrowDown:1, f:1, F:1,
+  ArrowUp:2,   j:2, J:2,
+  ArrowRight:3,k:3, K:3,
+};
+
+const laneEls  = [0,1,2,3].map(i => document.getElementById(`lane-${i}`));
+const hitZones = [0,1,2,3].map(i => document.getElementById(`hz-${i}`));
+const charWrap = document.getElementById('character-wrap');
+const judgeEl  = document.getElementById('judgment');
+const scoreEl  = document.getElementById('score');
+const comboEl  = document.getElementById('combo');
+const bpmDot   = document.getElementById('bpm-dot');
+const progress = document.getElementById('progress');
+
+let chart = [], activeNotes = [], chartIdx = 0;
+let score = 0, combo = 0, maxCombo = 0, perfects = 0, goods = 0, misses = 0;
+let missStreak = 0;          // 連続ミス数
+const DIZZY_THRESHOLD = 6;  // これ以上連続でミス → ぐるぐる目
+let gameRunning = false, rafId = null;
+let songStartTime = 0;
+
+// Height of the lane container (cache and recalc on resize)
+let laneH = 0, hitY = 0;
+function calcLaneDims() {
+  const lc = document.getElementById('lane-container');
+  laneH = lc.clientHeight;
+  hitY  = laneH * 0.82 - 22; // center of hit zone (note half-height = 22)
+}
+window.addEventListener('resize', calcLaneDims);
+
+function getSongTime() {
+  return audioCtx ? audioCtx.currentTime - songStartTime : 0;
+}
+
+// Beat detection via rAF (no setTimeout per beat)
+let lastBeatIdx = -1;
+function checkBeat(now) {
+  const beatIdx = Math.floor(now / BEAT);
+  if (beatIdx !== lastBeatIdx) {
+    lastBeatIdx = beatIdx;
+    bpmDot.classList.remove('pulse');
+    void bpmDot.offsetWidth;
+    bpmDot.classList.add('pulse');
+  }
+}
+
+function gameLoop() {
+  if (!gameRunning) return;
+  const now = getSongTime();
+
+  checkBeat(now);
+
+  // Spawn notes whose on-screen time has come
+  // A note at time T should be at top when (T - now) * NOTE_SPEED == hitY
+  // => spawn when now >= T - hitY/NOTE_SPEED - 0.05
+  const spawnThreshold = hitY / NOTE_SPEED + 0.05;
+  while (chartIdx < chart.length && chart[chartIdx].time - now <= spawnThreshold) {
+    const n = chart[chartIdx++];
+    const el = document.createElement('div');
+    el.className = 'note';
+    laneEls[n.lane].appendChild(el);
+    activeNotes.push({ el, lane: n.lane, time: n.time, removed: false });
+  }
+
+  // Move notes using transform (GPU layer, no layout thrash)
+  for (let i = activeNotes.length - 1; i >= 0; i--) {
+    const n = activeNotes[i];
+    const dt = n.time - now;
+    const y  = hitY - dt * NOTE_SPEED;   // pixels from top of lane
+    n.el.style.transform = `translateY(${y}px)`;
+
+    // Auto-miss
+    if (dt < -GOOD_WIN) {
+      n.el.remove();
+      activeNotes.splice(i, 1);
+      if (!n.removed) registerMiss(n.lane);
+    }
+  }
+
+  progress.style.width = Math.min(100, (now / SONG_DUR) * 100) + '%';
+
+  if (now >= SONG_DUR) { endGame(); return; }
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+function pressLane(lane) {
+  if (!gameRunning) return;
+  hitZones[lane].classList.add('pressed');
+  clearTimeout(hitZones[lane]._t);
+  hitZones[lane]._t = setTimeout(() => hitZones[lane].classList.remove('pressed'), 120);
+
+  const now = getSongTime();
+  let best = null, bestDt = Infinity;
+  for (const n of activeNotes) {
+    if (n.lane !== lane || n.removed) continue;
+    const dt = Math.abs(n.time - now);
+    if (dt < bestDt) { bestDt = dt; best = n; }
+  }
+  if (best && bestDt <= GOOD_WIN) hitNote(best, bestDt <= PERFECT_WIN);
+}
+
+function setFaceState(state) {
+  if (window.__setEyeState) window.__setEyeState(state);
+}
+
+function hitNote(n, perfect) {
+  n.removed = true;
+  const idx = activeNotes.indexOf(n);
+  if (idx !== -1) activeNotes.splice(idx, 1);
+  n.el.remove();
+
+  const burst = document.createElement('div');
+  burst.className = 'hit-burst';
+  laneEls[n.lane].appendChild(burst);
+  setTimeout(() => burst.remove(), 350);
+
+  // ヒットでmissStreak回復
+  missStreak = Math.max(0, missStreak - 2);
+  if (missStreak < DIZZY_THRESHOLD) setFaceState('normal');
+
+  combo++;
+  maxCombo = Math.max(maxCombo, combo);
+  const mul = 1 + Math.min(3, Math.floor(combo / 10) * 0.5);
+
+  if (perfect) {
+    perfects++;
+    score += Math.round(300 * mul);
+    showJudge('PERFECT', '#fff');
+  } else {
+    goods++;
+    score += Math.round(100 * mul);
+    showJudge('GOOD', '#aaa');
+  }
+  charPose(['pose-left','pose-right','pose-up','pose-down'][n.lane]);
+  updateHUD();
+}
+
+function registerMiss(lane) {
+  misses++; combo = 0;
+  missStreak++;
+  showJudge('MISS', '#e44');
+  const fl = document.createElement('div');
+  fl.className = 'miss-flash';
+  laneEls[lane].appendChild(fl);
+  setTimeout(() => fl.remove(), 280);
+
+  if (missStreak >= DIZZY_THRESHOLD) {
+    setFaceState('dizzy');
+    charPose('pose-miss'); // 体は揺れる
+  } else {
+    charPose('pose-miss'); // ✕目 + 揺れ
+  }
+  updateHUD();
+}
+
+function showJudge(text, color) {
+  judgeEl.textContent = text;
+  judgeEl.style.color = color;
+  judgeEl.classList.remove('show');
+  void judgeEl.offsetWidth;
+  judgeEl.classList.add('show');
+}
+
+let poseTimeout = null;
+function charPose(pose) {
+  charWrap.classList.remove('idle','pose-left','pose-right','pose-up','pose-down','pose-miss');
+  charWrap.classList.add(pose);
+  clearTimeout(poseTimeout);
+
+  // ✕ 目：miss かつ dizzy でない場合
+  if (pose === 'pose-miss' && window.__setEyeState) {
+    window.__setEyeState('cross'); // dizzy 中は内部で無視される
+  }
+
+  poseTimeout = setTimeout(() => {
+    charWrap.classList.remove(pose);
+    charWrap.classList.add('idle');
+    if (window.__setEyeState) window.__setEyeState('cross_end');
+  }, 340);
+}
+
+function updateHUD() {
+  scoreEl.textContent = score.toLocaleString();
+  comboEl.textContent = `COMBO × ${combo}`;
+  comboEl.className = combo > 0 ? 'active' : '';
+  document.getElementById('st-p').textContent = perfects;
+  document.getElementById('st-g').textContent = goods;
+  document.getElementById('st-m').textContent = misses;
+  const tot = perfects + goods + misses;
+  const acc = tot > 0 ? (perfects * 100 + goods * 50) / (tot * 100) * 100 : 100;
+  document.getElementById('accuracy-fill').style.width = acc.toFixed(1) + '%';
+}
+
+function startGame() {
+  // Reset
+  score = combo = maxCombo = perfects = goods = misses = chartIdx = missStreak = 0;
+  lastBeatIdx = -1;
+  setFaceState('normal');
+  activeNotes = [];
+  laneEls.forEach(l => l.querySelectorAll('.note,.hit-burst,.miss-flash').forEach(e => e.remove()));
+  progress.style.width = '0%';
+
+  calcLaneDims();
+  chart = generateChart(SONG_DUR);
+  gameRunning = true;
+  updateHUD();
+
+  // Fresh AudioContext — 同一 t0 で音楽とノーツを完全同期
+  if (audioCtx) { stopMusic(); audioCtx.close(); }
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const t0 = audioCtx.currentTime + 0.1;
+  songStartTime = t0;
+  startMusic(SONG_DUR, t0);
+
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  gameRunning = false;
+  stopMusic();
+  cancelAnimationFrame(rafId);
+
+  const tot = perfects + goods + misses;
+  const acc = tot > 0 ? (perfects * 100 + goods * 50) / (tot * 100) * 100 : 100;
+  let grade = acc >= 95 ? 'S' : acc >= 85 ? 'A' : acc >= 70 ? 'B' : acc >= 55 ? 'C' : 'D';
+
+  document.getElementById('result-score').textContent = score.toLocaleString();
+  document.getElementById('result-grade').textContent = grade;
+  document.getElementById('result-stats').innerHTML =
+    `PERFECT &nbsp;${perfects}<br>GOOD &nbsp;${goods}<br>MISS &nbsp;${misses}<br>MAX COMBO &nbsp;${maxCombo}<br>ACCURACY &nbsp;${acc.toFixed(1)}%`;
+
+  document.getElementById('result-screen').style.display = 'flex';
+  document.getElementById('start-screen').style.display  = 'none';
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+const held = new Set();
+document.addEventListener('keydown', e => {
+  if (held.has(e.key)) return;
+  held.add(e.key);
+  if (e.key === ' ' || e.key === 'Enter') {
+    if (!document.getElementById('overlay').classList.contains('hidden')) {
+      document.getElementById('overlay').classList.add('hidden');
+      document.getElementById('result-screen').style.display = 'none';
+      document.getElementById('start-screen').style.display  = 'block';
+      startGame();
+    }
+    return;
+  }
+  const lane = KEY_MAP[e.key];
+  if (lane !== undefined) { e.preventDefault(); pressLane(lane); }
+});
+document.addEventListener('keyup', e => held.delete(e.key));
+window.addEventListener('keydown', e => {
+  if ([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+});
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  startGame();
+});
+document.getElementById('retry-btn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('result-screen').style.display = 'none';
+  document.getElementById('start-screen').style.display  = 'block';
+  startGame();
+});
+
+// ============================================================
+// ピクセルアート キャラクター (しろいポン風 16×18ドット)
+// ============================================================
+(function () {
+  // カラーパレット
+  const PAL = [
+    null,        // 0: transparent
+    '#f2f2f2',   // 1: 白ボディ
+    '#d0d0d0',   // 2: 薄グレー (耳の内側・影)
+    '#282828',   // 3: 輪郭
+    '#1a1a1a',   // 4: 目
+  ];
+
+  // スプライト定義 16×18 (-1=目スロット)
+  // しろいポン風: クマ耳(内側凹)、丸ボディ、腕あり、丸足
+  const SP = [
+  //  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+    [ 0, 0, 0, 3, 1, 3, 0, 0, 0, 3, 1, 3, 0, 0, 0, 0], //  0 耳頂点(1px)
+    [ 0, 0, 3, 1, 1, 1, 3, 0, 3, 1, 1, 1, 3, 0, 0, 0], //  1 耳(3px)
+    [ 0, 0, 3, 1, 1, 3, 0, 0, 0, 3, 1, 1, 3, 0, 0, 0], //  2 耳根・内側凹(2px)
+    [ 0, 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0, 0], //  3 頭頂(9px)
+    [ 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0], //  4 頭(11px)
+    [ 0, 3, 1, 1,-1,-1, 1, 1,-1,-1, 1, 1, 1, 3, 0, 0], //  5 目A(12px)
+    [ 0, 3, 1, 1,-1,-1, 1, 1,-1,-1, 1, 1, 1, 3, 0, 0], //  6 目B
+    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0], //  7 頬(12px)
+    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], //  8 腕ブロブ(14px)
+    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], //  9 腕ブロブ
+    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0], // 10 ボディ(12px)
+    [ 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0], // 11 ボディ下(10px)
+    [ 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0], // 12 底輪郭
+    [ 0, 0, 0, 3, 1, 1, 3, 0, 3, 1, 1, 3, 0, 0, 0, 0], // 13 足首
+    [ 0, 0, 0, 3, 1, 1, 3, 0, 3, 1, 1, 3, 0, 0, 0, 0], // 14 足
+    [ 0, 0, 3, 1, 1, 1, 3, 0, 3, 1, 1, 1, 3, 0, 0, 0], // 15 足先(幅広)
+    [ 0, 0, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3, 0, 0, 0], // 16 足底
+    [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 17 余白
+  ];
+  const ROWS = SP.length, COLS = SP[0].length;
+
+  // 目の位置 (左: col4-5, 右: col8-9, row5-6)
+  const LE = {c:4, r:5}; // left eye
+  const RE = {c:8, r:5}; // right eye
+
+  let _eyeState = 'normal'; // 'normal' | 'cross' | 'dizzy'
+  let _dizzyAngle = 0;
+  let _dizzyRaf = null;
+
+  // --- スプライト描画 ---
+  function draw(ctx, s, es, angle) {
+    ctx.clearRect(0, 0, COLS * s, ROWS * s);
+    ctx.imageSmoothingEnabled = false;
+
+    // ベース描画 (-1 スロットはスキップ)
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const v = SP[r][c];
+        if (v <= 0) continue;
+        ctx.fillStyle = PAL[v];
+        ctx.fillRect(c * s, r * s, s, s);
+      }
+    }
+
+    // 目描画
+    const lx = (LE.c + 1) * s, rx = (RE.c + 1) * s;
+    const ey = (LE.r + 1) * s; // eye center Y
+
+    if (es === 'normal') {
+      // ハの字: 左目=/ (外低・内高), 右目=\ (内高・外低)
+      ctx.fillStyle = PAL[4];
+      ctx.fillRect((LE.c + 0) * s, (LE.r + 1) * s, s, s); // 左外・低
+      ctx.fillRect((LE.c + 1) * s, (LE.r + 0) * s, s, s); // 左内・高
+      ctx.fillRect((RE.c + 0) * s, (RE.r + 0) * s, s, s); // 右内・高
+      ctx.fillRect((RE.c + 1) * s, (RE.r + 1) * s, s, s); // 右外・低
+    } else if (es === 'cross') {
+      // ✕ 目
+      const half = s * 1.1;
+      ctx.strokeStyle = PAL[3];
+      ctx.lineWidth = s * 0.75;
+      ctx.lineCap = 'square';
+      for (const cx of [lx, rx]) {
+        ctx.beginPath(); ctx.moveTo(cx - half, ey - half); ctx.lineTo(cx + half, ey + half); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + half, ey - half); ctx.lineTo(cx - half, ey + half); ctx.stroke();
+      }
+    } else if (es === 'dizzy') {
+      // ぐるぐる目 (2重弧がスピン)
+      const r1 = s * 1.1, r2 = s * 0.5;
+      ctx.lineWidth = Math.max(1, s * 0.45);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = PAL[3];
+      for (const cx of [lx, rx]) {
+        ctx.beginPath(); ctx.arc(cx, ey, r1, angle, angle + Math.PI * 1.4); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, ey, r2, angle + Math.PI, angle + Math.PI * 2.3); ctx.stroke();
+        ctx.fillStyle = PAL[3];
+        ctx.fillRect(cx - s * 0.2, ey - s * 0.2, s * 0.4, s * 0.4);
+      }
+    }
+  }
+
+  // --- メインキャラ (ゲーム画面) ---
+  const mainC = document.getElementById('character');
+  mainC.width  = COLS * 11;
+  mainC.height = ROWS * 11;
+  const mainCtx = mainC.getContext('2d');
+
+  function renderMain() {
+    draw(mainCtx, 11, _eyeState, _dizzyAngle);
+  }
+
+  function startDizzy() {
+    function loop() {
+      _dizzyAngle += 0.13;
+      renderMain();
+      if (_eyeState === 'dizzy') _dizzyRaf = requestAnimationFrame(loop);
+    }
+    _dizzyRaf = requestAnimationFrame(loop);
+  }
+
+  // 外部から目ステートを切り替える関数
+  window.__setEyeState = function (state) {
+    if (_eyeState === 'dizzy' && state === 'cross') return; // dizzy 優先
+    if (_dizzyRaf) { cancelAnimationFrame(_dizzyRaf); _dizzyRaf = null; }
+    if (state === 'cross_end') {
+      // ✕ 終了: dizzy でなければ normal へ
+      if (_eyeState !== 'dizzy') { _eyeState = 'normal'; renderMain(); }
+      return;
+    }
+    _eyeState = state;
+    if (state === 'dizzy') { _dizzyAngle = 0; startDizzy(); }
+    else renderMain();
+  };
+
+  renderMain();
+
+  // --- オーバーレイ用 小キャラ (静的) ---
+  function makeSmall(slotId, scale) {
+    const slot = document.getElementById(slotId);
+    if (!slot) return;
+    const c = document.createElement('canvas');
+    c.width  = COLS * scale;
+    c.height = ROWS * scale;
+    const ctx = c.getContext('2d');
+    draw(ctx, scale, 'normal', 0);
+    slot.appendChild(c);
+  }
+  makeSmall('overlay-char-slot', 6);
+  makeSmall('result-char-slot',  4);
+})();
+
+</script>
 </body>
 </html>
