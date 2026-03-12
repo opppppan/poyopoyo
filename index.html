@@ -224,17 +224,14 @@
   /* notes — use transform:translateY instead of top for GPU compositing */
   .note {
     position: absolute;
-    width: 44px; height: 44px; border-radius: 50%;
+    width: 44px; height: 44px;
     left: 50%; margin-left: -22px;
     top: 0;
     will-change: transform;
     pointer-events: none;
     z-index: 3;
   }
-  .lane-0 .note { background:radial-gradient(circle at 35% 35%,rgba(180,200,255,.95),rgba(100,140,255,.4)); border:2px solid rgba(160,180,255,.7); box-shadow:0 0 12px rgba(120,160,255,.5); }
-  .lane-1 .note { background:radial-gradient(circle at 35% 35%,rgba(200,255,210,.95),rgba(80,200,120,.4));  border:2px solid rgba(150,230,170,.7); box-shadow:0 0 12px rgba(80,200,120,.5); }
-  .lane-2 .note { background:radial-gradient(circle at 35% 35%,rgba(255,210,180,.95),rgba(255,140,80,.4));  border:2px solid rgba(255,180,140,.7); box-shadow:0 0 12px rgba(255,140,80,.5); }
-  .lane-3 .note { background:radial-gradient(circle at 35% 35%,rgba(255,180,230,.95),rgba(220,80,160,.4));  border:2px solid rgba(255,150,200,.7); box-shadow:0 0 12px rgba(220,80,160,.5); }
+  .note svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5)); overflow: visible; }
 
   .hit-burst {
     position: absolute;
@@ -293,7 +290,7 @@
 
     .hit-zone { width: 58px; height: 58px; bottom: 50px; }
 
-    .note { width: 50px; height: 50px; margin-left: -25px; }
+    .note { width: 50px; height: 50px; margin-left: -25px; border-radius: 0; }
 
     .hit-burst { width: 58px; height: 58px; bottom: 50px; }
 
@@ -577,6 +574,48 @@ const KEY_MAP       = {
   ArrowRight:3,k:3, K:3,
 };
 
+// ============================================================
+// 寿司ノーツ SVG (軍艦スタイル上面図 / フラットデザイン)
+// ============================================================
+const SUSHI_NOTES = [
+  // Lane 0: まぐろ (tuna) — 赤
+  `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
+    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
+    <circle cx="22" cy="22" r="14" fill="#E8435A"/>
+    <line x1="10" y1="19" x2="34" y2="19" stroke="#C0293A" stroke-width="1.5"/>
+    <line x1="10" y1="24" x2="34" y2="24" stroke="#C0293A" stroke-width="1" opacity="0.6"/>
+    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.22)"/>
+  </svg>`,
+  // Lane 1: サーモン (salmon) — オレンジ
+  `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
+    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
+    <circle cx="22" cy="22" r="14" fill="#FF7043"/>
+    <line x1="12" y1="16" x2="26" y2="30" stroke="#E64A19" stroke-width="2.5"/>
+    <line x1="19" y1="13" x2="33" y2="27" stroke="#E64A19" stroke-width="2" opacity="0.7"/>
+    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.22)"/>
+  </svg>`,
+  // Lane 2: えび (shrimp) — ピーチ
+  `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
+    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
+    <circle cx="22" cy="22" r="14" fill="#FFAB91"/>
+    <ellipse cx="22" cy="18" rx="10" ry="4" fill="#FF8A65" opacity="0.6"/>
+    <ellipse cx="22" cy="25" rx="10" ry="3" fill="#FF7043" opacity="0.45"/>
+    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.22)"/>
+  </svg>`,
+  // Lane 3: たまご (egg) — 黄
+  `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
+    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
+    <circle cx="22" cy="22" r="14" fill="#FFD740"/>
+    <ellipse cx="22" cy="18" rx="9" ry="3" fill="#FFE57F" opacity="0.65"/>
+    <ellipse cx="22" cy="26" rx="8" ry="2.5" fill="#FFAB00" opacity="0.4"/>
+    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.28)"/>
+  </svg>`,
+];
+
 const laneEls  = [0,1,2,3].map(i => document.getElementById(`lane-${i}`));
 const hitZones = [0,1,2,3].map(i => document.getElementById(`hz-${i}`));
 const charWrap = document.getElementById('character-wrap');
@@ -632,6 +671,7 @@ function gameLoop() {
     const n = chart[chartIdx++];
     const el = document.createElement('div');
     el.className = 'note';
+    el.innerHTML = SUSHI_NOTES[n.lane];
     laneEls[n.lane].appendChild(el);
     activeNotes.push({ el, lane: n.lane, time: n.time, removed: false });
   }
@@ -782,12 +822,15 @@ function startGame() {
   // Fresh AudioContext — 同一 t0 で音楽とノーツを完全同期
   if (audioCtx) { stopMusic(); audioCtx.close(); }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const t0 = audioCtx.currentTime + 0.1;
-  songStartTime = t0;
-  startMusic(SONG_DUR, t0);
 
-  cancelAnimationFrame(rafId);
-  rafId = requestAnimationFrame(gameLoop);
+  // iOS/Android では resume() しないと suspended のまま音が出ない
+  audioCtx.resume().then(() => {
+    const t0 = audioCtx.currentTime + 0.1;
+    songStartTime = t0;
+    startMusic(SONG_DUR, t0);
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(gameLoop);
+  });
 }
 
 function endGame() {
