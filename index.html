@@ -159,8 +159,8 @@
   #judgment {
     position: absolute;
     top: 38%; left: 50%; transform: translateX(-50%);
-    font-size: 20px; font-weight: bold; letter-spacing: 5px;
     pointer-events: none; opacity: 0; z-index: 20;
+    white-space: nowrap;
   }
   #judgment.show { animation: judgeFade 0.45s ease forwards; }
   @keyframes judgeFade {
@@ -263,6 +263,30 @@
 
   #progress { position:fixed; top:0; left:0; height:2px; background:rgba(255,255,255,0.35); z-index:900; width:0%; }
 
+  /* ---- MENUボタン ---- */
+  #quit-btn {
+    display: none; background: none; border: 1px solid rgba(255,255,255,0.15);
+    color: #555; font-family: 'Courier New', monospace; font-size: 9px;
+    letter-spacing: 2px; padding: 4px 10px; cursor: pointer; transition: all .15s;
+  }
+  #quit-btn.visible { display: inline-block; }
+  #quit-btn:hover { color: #ccc; border-color: rgba(255,255,255,0.4); }
+
+  /* ---- 曲選択 ---- */
+  #track-select { display:flex; gap:8px; margin:6px 0 10px; }
+  .track-btn {
+    background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12);
+    color:#444; font-family:'Courier New',monospace; padding:10px 14px;
+    cursor:pointer; text-align:center; display:flex; flex-direction:column; gap:5px;
+    transition:all .15s; min-width:76px;
+  }
+  .track-btn:hover { border-color:rgba(255,255,255,0.28); color:#777; }
+  .track-btn.active { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.5); }
+  .tk-name { font-size:12px; font-weight:bold; color:inherit; letter-spacing:3px; }
+  .track-btn.active .tk-name { color:#fff; }
+  .tk-label { font-size:8px; color:#555; letter-spacing:1px; }
+  .track-btn.active .tk-label { color:#777; }
+
   /* ---- スマホ対応 ---- */
   @media (max-width: 640px) or (orientation: portrait) {
     #header { padding: 8px 16px; }
@@ -332,13 +356,26 @@
 
 <div id="progress"></div>
 
+<!-- 寿司ノーツ用 clipPath 定義（全ノーツで共有） -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="note-clip">
+      <circle cx="22" cy="22" r="21"/>
+    </clipPath>
+  </defs>
+</svg>
+
 <div id="overlay">
   <div id="start-screen">
     <p class="overlay-title">PRESS START</p>
     <div id="overlay-char-slot"></div>
     <p class="overlay-big">DANCE</p>
     <p class="overlay-sub">RHYTHM GAME</p>
-    <br>
+    <div id="track-select">
+      <div class="track-btn active" data-track="0"><span class="tk-name">DANCE</span><span class="tk-label">EDM · 128BPM</span></div>
+      <div class="track-btn" data-track="1"><span class="tk-name">CHIP</span><span class="tk-label">8-BIT · 150BPM</span></div>
+      <div class="track-btn" data-track="2"><span class="tk-name">RPG</span><span class="tk-label">ADV · 100BPM</span></div>
+    </div>
     <button class="start-btn" id="start-btn">START</button>
     <p id="keyboard-hint" style="font-size:10px;color:#333;letter-spacing:3px;margin-top:16px;">← ↓ ↑ →  /  D F J K</p>
   </div>
@@ -353,7 +390,10 @@
 </div>
 
 <div id="header">
-  <div id="title">DANCE</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div id="title">DANCE</div>
+    <button id="quit-btn">■ MENU</button>
+  </div>
   <div>
     <div id="score">0</div>
     <div id="combo">COMBO × 0</div>
@@ -388,116 +428,253 @@
 
 <script>
 // ============================================================
-// AUDIO — lookahead scheduler (never creates all nodes at once)
+// AUDIO — lookahead scheduler / 3トラック対応
 // ============================================================
-const BPM  = 128;
-const BEAT = 60 / BPM;      // ~0.469 s
-const BAR  = BEAT * 4;
+let BPM = 128, BEAT = 60 / 128, BAR = 60 / 128 * 4;
 
 let audioCtx = null;
 let schedulerTimer = null;
 let nextBarTime = 0;
 let scheduledBar = 0;
 let totalBars = 0;
+let currentScheduleBar = null;
 
-const SCHEDULE_AHEAD = 0.3;   // schedule up to 300ms ahead
-const SCHEDULER_MS   = 100;   // check every 100ms
+const SCHEDULE_AHEAD = 0.3;
+const SCHEDULER_MS   = 100;
 
 function noise(ctx) {
   const buf = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  const s = ctx.createBufferSource();
-  s.buffer = buf;
-  return s;
+  const s = ctx.createBufferSource(); s.buffer = buf; return s;
 }
 
+// ---- DANCE (EDM) ----
 function kick(t) {
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
   o.connect(g); g.connect(audioCtx.destination);
   o.frequency.setValueAtTime(150, t);
   o.frequency.exponentialRampToValueAtTime(40, t + 0.08);
-  g.gain.setValueAtTime(1.1, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  g.gain.setValueAtTime(1.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
   o.start(t); o.stop(t + 0.3);
 }
-
 function snare(t) {
-  const n = noise(audioCtx);
-  const f = audioCtx.createBiquadFilter();
-  const g = audioCtx.createGain();
+  const n = noise(audioCtx), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
   f.type = 'bandpass'; f.frequency.value = 2000; f.Q.value = 0.5;
   n.connect(f); f.connect(g); g.connect(audioCtx.destination);
-  g.gain.setValueAtTime(0.55, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  g.gain.setValueAtTime(0.55, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
   n.start(t); n.stop(t + 0.1);
 }
-
 function hihat(t, open) {
-  const n = noise(audioCtx);
-  const f = audioCtx.createBiquadFilter();
-  const g = audioCtx.createGain();
+  const n = noise(audioCtx), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
   f.type = 'highpass'; f.frequency.value = 8000;
   n.connect(f); f.connect(g); g.connect(audioCtx.destination);
   const dur = open ? 0.2 : 0.04;
-  g.gain.setValueAtTime(0.22, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   n.start(t); n.stop(t + dur);
 }
-
 function bass(t, freq, dur) {
-  const o = audioCtx.createOscillator();
-  const f = audioCtx.createBiquadFilter();
-  const g = audioCtx.createGain();
+  const o = audioCtx.createOscillator(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
   o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 500;
   o.connect(f); f.connect(g); g.connect(audioCtx.destination);
   o.frequency.value = freq;
-  g.gain.setValueAtTime(0.38, t);
-  g.gain.setValueAtTime(0.38, t + dur - 0.02);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.start(t); o.stop(t + dur);
+  g.gain.setValueAtTime(0.38, t); g.gain.setValueAtTime(0.38, t + dur - 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.start(t); o.stop(t + dur);
 }
-
 function synth(t, freq) {
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = 'square';
-  o.connect(g); g.connect(audioCtx.destination);
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'square'; o.connect(g); g.connect(audioCtx.destination);
   o.frequency.value = freq;
   g.gain.setValueAtTime(0.07, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + BEAT * 0.1);
   o.start(t); o.stop(t + BEAT * 0.1);
 }
-
-const s16 = BEAT / 4;
-
-const BASS_PAT = [
-  {step:0,freq:65.4,dur:BEAT*.8},{step:2,freq:65.4,dur:BEAT*.4},
-  {step:3,freq:73.4,dur:BEAT*.4},{step:4,freq:87.3,dur:BEAT*.4},
-  {step:6,freq:65.4,dur:BEAT*.4},{step:8,freq:65.4,dur:BEAT*.8},
-  {step:10,freq:58.3,dur:BEAT*.4},{step:12,freq:65.4,dur:BEAT*.4},
-  {step:14,freq:98,dur:BEAT*.4},
-];
-const SYNTH_PAT = [
-  {step:0,freq:523.3},{step:2,freq:587.3},{step:3,freq:659.3},{step:4,freq:698.5},
-  {step:6,freq:659.3},{step:8,freq:523.3},{step:10,freq:466.2},
-  {step:12,freq:392},{step:14,freq:349.2},
-];
-
-function scheduleBar(t) {
-  // Drums
-  [0,3,8,12,14].forEach(st => kick(t + st * s16));
-  [4,12].forEach(st => snare(t + st * s16));
-  for (let st = 0; st < 16; st += 2) hihat(t + st * s16, st === 4 || st === 12);
-  // Bass & synth
-  BASS_PAT.forEach(n  => bass(t + n.step * s16, n.freq, n.dur));
-  SYNTH_PAT.forEach(n => synth(t + n.step * s16, n.freq));
+function scheduleBarDance(t) {
+  const s = BEAT / 4;
+  // 4つ打ちキック + アップビートオープンハット
+  [0,4,8,12].forEach(st => kick(t + st * s));
+  [4,12].forEach(st => snare(t + st * s));
+  for (let st = 0; st < 16; st += 2) hihat(t + st * s, st % 4 === 2);
+  // 跳ねるオクターブベース
+  const BP = [
+    {step:0,freq:65.4,dur:s*.9},{step:1,freq:65.4,dur:s*.6},
+    {step:3,freq:82.4,dur:s*.6},{step:4,freq:87.3,dur:s*.9},
+    {step:5,freq:87.3,dur:s*.6},{step:7,freq:98.0,dur:s*.6},
+    {step:8,freq:65.4,dur:s*.9},{step:9,freq:65.4,dur:s*.6},
+    {step:11,freq:73.4,dur:s*.6},{step:12,freq:87.3,dur:s*.9},
+    {step:13,freq:87.3,dur:s*.6},{step:15,freq:110.0,dur:s*.6},
+  ];
+  // キャッチーなリード (Cメジャー上昇→下降)
+  const SP = [
+    {step:0,freq:523.3,d:2},{step:2,freq:659.3,d:2},
+    {step:4,freq:783.9,d:2},{step:6,freq:880.0,d:2},
+    {step:8,freq:783.9,d:2},{step:10,freq:659.3,d:2},
+    {step:12,freq:523.3,d:2},{step:14,freq:392.0,d:2},
+  ];
+  BP.forEach(n => bass(t + n.step * s, n.freq, n.dur));
+  SP.forEach(n => { synth(t + n.step * s, n.freq); synth(t + (n.step + n.d) * s - s * 0.5, n.freq * 1.5); });
 }
+
+// ---- CHIP (8-BIT) ----
+function kickChip(t) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'square'; o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.06);
+  g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  o.start(t); o.stop(t + 0.12);
+}
+function snareChip(t) {
+  const n = noise(audioCtx), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  f.type = 'bandpass'; f.frequency.value = 3500; f.Q.value = 0.8;
+  n.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
+  n.start(t); n.stop(t + 0.055);
+}
+function hihatChip(t) {
+  const n = noise(audioCtx), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  f.type = 'highpass'; f.frequency.value = 11000;
+  n.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.018);
+  n.start(t); n.stop(t + 0.018);
+}
+function bassChip(t, freq, dur) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'square'; o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.2, t); g.gain.setValueAtTime(0.2, t + dur * 0.8);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.start(t); o.stop(t + dur);
+}
+function leadChip(t, freq, dur) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'square'; o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.07, t); g.gain.setValueAtTime(0.07, t + dur * 0.85);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.start(t); o.stop(t + dur);
+}
+// Cメジャー、ノリノリ8bit
+const CHIP_BASS = [
+  {step:0,freq:130.8},{step:1,freq:196.0},{step:2,freq:261.6},{step:3,freq:196.0},
+  {step:4,freq:174.6},{step:5,freq:220.0},{step:6,freq:261.6},{step:7,freq:220.0},
+  {step:8,freq:130.8},{step:9,freq:196.0},{step:10,freq:261.6},{step:11,freq:329.6},
+  {step:12,freq:261.6},{step:13,freq:220.0},{step:14,freq:196.0},{step:15,freq:174.6},
+];
+// メロディA (高音域でキャッチー)
+const CHIP_LEAD = [
+  {step:0,freq:1046.5,d:1},{step:1,freq:1174.7,d:1},{step:2,freq:1318.5,d:2},
+  {step:4,freq:1174.7,d:1},{step:5,freq:1046.5,d:1},{step:6,freq:880.0,d:2},
+  {step:8,freq:1046.5,d:1},{step:9,freq:1174.7,d:1},{step:10,freq:1318.5,d:1},{step:11,freq:1567.0,d:1},
+  {step:12,freq:1318.5,d:2},{step:14,freq:1046.5,d:2},
+];
+// ハーモニー (1オクターブ下)
+const CHIP_HARM = [
+  {step:0,freq:523.3,d:2},{step:2,freq:659.3,d:2},
+  {step:4,freq:587.3,d:2},{step:6,freq:440.0,d:2},
+  {step:8,freq:523.3,d:2},{step:10,freq:659.3,d:2},
+  {step:12,freq:659.3,d:2},{step:14,freq:523.3,d:2},
+];
+function scheduleBarChip(t) {
+  const s = BEAT / 4;
+  // 4つ打ちキック
+  [0,4,8,12].forEach(st => kickChip(t + st * s));
+  [4,12].forEach(st => snareChip(t + st * s));
+  for (let st = 0; st < 16; st++) hihatChip(t + st * s);  // 16分ハット
+  CHIP_BASS.forEach(n => bassChip(t + n.step * s, n.freq, s * 0.85));
+  CHIP_LEAD.forEach(n => leadChip(t + n.step * s, n.freq, s * n.d * 0.88));
+  CHIP_HARM.forEach(n => leadChip(t + n.step * s, n.freq, s * n.d * 0.5));
+}
+
+// ---- RPG (ADVENTURE) ----
+function kickRpg(t) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine'; o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.15);
+  g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  o.start(t); o.stop(t + 0.45);
+}
+function snareRpg(t) {
+  const n = noise(audioCtx), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 0.7;
+  n.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  n.start(t); n.stop(t + 0.18);
+}
+function hihatRpg(t) {
+  const n = noise(audioCtx), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  f.type = 'highpass'; f.frequency.value = 9000;
+  n.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+  n.start(t); n.stop(t + 0.05);
+}
+function bassRpg(t, freq, dur) {
+  const o = audioCtx.createOscillator(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  o.type = 'triangle'; f.type = 'lowpass'; f.frequency.value = 600;
+  o.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t + 0.05);
+  g.gain.setValueAtTime(0.5, t + dur - 0.05); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.start(t); o.stop(t + dur);
+}
+function padRpg(t, freq, dur) {
+  const o = audioCtx.createOscillator(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  o.type = 'sawtooth'; f.type = 'lowpass'; f.frequency.value = 700;
+  o.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.036, t + 0.15);
+  g.gain.setValueAtTime(0.036, t + dur - 0.15); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.start(t); o.stop(t + dur);
+}
+function leadRpg(t, freq, dur) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'triangle'; o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1, t + 0.06);
+  g.gain.setValueAtTime(0.1, t + dur - 0.06); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.start(t); o.stop(t + dur);
+}
+// Gメジャー、元気なRPGマーチ
+const RPG_BASS = [
+  {step:0,freq:98.0,d:2},{step:2,freq:123.5,d:2},
+  {step:4,freq:130.8,d:2},{step:6,freq:146.8,d:2},
+  {step:8,freq:146.8,d:2},{step:10,freq:130.8,d:2},
+  {step:12,freq:98.0,d:2},{step:14,freq:98.0,d:2},
+];
+// Gメジャーコード進行 G - C - D - G
+const RPG_PADS = [
+  {step:0,freq:196.0,d:4},{step:0,freq:246.9,d:4},{step:0,freq:293.7,d:4},  // G
+  {step:4,freq:261.6,d:4},{step:4,freq:329.6,d:4},{step:4,freq:392.0,d:4},  // C
+  {step:8,freq:293.7,d:4},{step:8,freq:370.0,d:4},{step:8,freq:440.0,d:4},  // D
+  {step:12,freq:196.0,d:4},{step:12,freq:246.9,d:4},{step:12,freq:293.7,d:4}, // G
+];
+// 元気なファンファーレ風メロディ
+const RPG_LEAD = [
+  {step:0,freq:392.0,d:1},{step:1,freq:493.9,d:1},{step:2,freq:587.3,d:2},
+  {step:4,freq:659.3,d:1},{step:5,freq:587.3,d:1},{step:6,freq:523.3,d:2},
+  {step:8,freq:587.3,d:1},{step:9,freq:659.3,d:1},{step:10,freq:783.9,d:2},
+  {step:12,freq:740.0,d:1},{step:13,freq:659.3,d:1},{step:14,freq:587.3,d:2},
+];
+function scheduleBarRpg(t) {
+  const s = BEAT / 4;
+  // 4つ打ちキック
+  [0,4,8,12].forEach(st => kickRpg(t + st * s));
+  [4,12].forEach(st => snareRpg(t + st * s));
+  // 裏拍ハット (8分音符)
+  for (let st = 2; st < 16; st += 4) hihatRpg(t + st * s);
+  RPG_BASS.forEach(n => bassRpg(t + n.step * s, n.freq, s * n.d * 0.88));
+  RPG_PADS.forEach(n => padRpg(t + n.step * s, n.freq, s * n.d * 0.92));
+  RPG_LEAD.forEach(n => leadRpg(t + n.step * s, n.freq, s * n.d * 0.88));
+}
+
+// ---- トラック定義 ----
+const TRACKS = [
+  { name: 'DANCE', bpm: 128, fn: scheduleBarDance },
+  { name: 'CHIP',  bpm: 150, fn: scheduleBarChip  },
+  { name: 'RPG',   bpm: 100, fn: scheduleBarRpg   },
+];
+let selectedTrackIdx = 0;
 
 function runScheduler() {
   while (nextBarTime < audioCtx.currentTime + SCHEDULE_AHEAD && scheduledBar < totalBars) {
-    scheduleBar(nextBarTime);
+    currentScheduleBar(nextBarTime);
     nextBarTime += BAR;
     scheduledBar++;
   }
@@ -507,9 +684,7 @@ function runScheduler() {
 }
 
 function startMusic(songDur, t0) {
-  totalBars    = Math.ceil(songDur / BAR);
-  nextBarTime  = t0;
-  scheduledBar = 0;
+  totalBars = Math.ceil(songDur / BAR); nextBarTime = t0; scheduledBar = 0;
   runScheduler();
 }
 
@@ -543,7 +718,7 @@ function generateChart(songDur) {
     const bp = beatLanes[bar % beatLanes.length];
     // 4拍 (step 0,4,8,12) = キック・スネア位置
     [0, 4, 8, 12].forEach((step, bi) => {
-      notes.push({ time: barT + step * s16, lane: bp[bi] });
+      notes.push({ time: barT + step * BEAT / 4, lane: bp[bi] });
     });
 
     // 後半 (bar>4) は8分音符を部分的に追加
@@ -552,7 +727,7 @@ function generateChart(songDur) {
       // 偶数barは前半2つ, 奇数barは後半2つ
       const steps = (bar % 2 === 0) ? [2, 6] : [10, 14];
       steps.forEach((step, ei) => {
-        notes.push({ time: barT + step * s16, lane: ep[ei] });
+        notes.push({ time: barT + step * BEAT / 4, lane: ep[ei] });
       });
     }
   }
@@ -579,40 +754,63 @@ const KEY_MAP       = {
 // ============================================================
 const SUSHI_NOTES = [
   // Lane 0: まぐろ (tuna) — 赤
+  // 上半分=ネタ, のり帯, 下半分=シャリ (断面図スタイル)
   `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
-    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
-    <circle cx="22" cy="22" r="14" fill="#E8435A"/>
-    <line x1="10" y1="19" x2="34" y2="19" stroke="#C0293A" stroke-width="1.5"/>
-    <line x1="10" y1="24" x2="34" y2="24" stroke="#C0293A" stroke-width="1" opacity="0.6"/>
-    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.22)"/>
+    <g clip-path="url(#note-clip)">
+      <rect x="0" y="0"  width="44" height="44" fill="#F5EFE0"/>
+      <rect x="0" y="26" width="44" height="18" fill="#EBE4D0"/>
+      <rect x="0" y="30" width="44" height="5"  fill="#E0D8C0" opacity="0.6"/>
+      <rect x="0" y="19" width="44" height="5"  fill="#2D3B2D"/>
+      <rect x="0" y="0"  width="44" height="20" fill="#E8435A"/>
+      <rect x="0" y="0"  width="44" height="5"  fill="#EF6878" opacity="0.55"/>
+      <line x1="0" y1="9"  x2="44" y2="9"  stroke="#C0293A" stroke-width="1.5"/>
+      <line x1="0" y1="15" x2="44" y2="15" stroke="#C0293A" stroke-width="1" opacity="0.5"/>
+    </g>
+    <circle cx="22" cy="22" r="21" fill="none" stroke="#1A1A1A" stroke-width="1.5"/>
   </svg>`,
   // Lane 1: サーモン (salmon) — オレンジ
   `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
-    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
-    <circle cx="22" cy="22" r="14" fill="#FF7043"/>
-    <line x1="12" y1="16" x2="26" y2="30" stroke="#E64A19" stroke-width="2.5"/>
-    <line x1="19" y1="13" x2="33" y2="27" stroke="#E64A19" stroke-width="2" opacity="0.7"/>
-    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.22)"/>
+    <g clip-path="url(#note-clip)">
+      <rect x="0" y="0"  width="44" height="44" fill="#F5EFE0"/>
+      <rect x="0" y="26" width="44" height="18" fill="#EBE4D0"/>
+      <rect x="0" y="30" width="44" height="5"  fill="#E0D8C0" opacity="0.6"/>
+      <rect x="0" y="19" width="44" height="5"  fill="#2D3B2D"/>
+      <rect x="0" y="0"  width="44" height="20" fill="#FF7043"/>
+      <rect x="0" y="0"  width="44" height="5"  fill="#FF8A65" opacity="0.55"/>
+      <line x1="0"  y1="14" x2="18" y2="0"  stroke="#E64A19" stroke-width="3"/>
+      <line x1="14" y1="20" x2="36" y2="2"  stroke="#E64A19" stroke-width="2.5"/>
+      <line x1="28" y1="20" x2="46" y2="6"  stroke="#E64A19" stroke-width="2" opacity="0.7"/>
+    </g>
+    <circle cx="22" cy="22" r="21" fill="none" stroke="#1A1A1A" stroke-width="1.5"/>
   </svg>`,
   // Lane 2: えび (shrimp) — ピーチ
   `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
-    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
-    <circle cx="22" cy="22" r="14" fill="#FFAB91"/>
-    <ellipse cx="22" cy="18" rx="10" ry="4" fill="#FF8A65" opacity="0.6"/>
-    <ellipse cx="22" cy="25" rx="10" ry="3" fill="#FF7043" opacity="0.45"/>
-    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.22)"/>
+    <g clip-path="url(#note-clip)">
+      <rect x="0" y="0"  width="44" height="44" fill="#F5EFE0"/>
+      <rect x="0" y="26" width="44" height="18" fill="#EBE4D0"/>
+      <rect x="0" y="30" width="44" height="5"  fill="#E0D8C0" opacity="0.6"/>
+      <rect x="0" y="19" width="44" height="5"  fill="#2D3B2D"/>
+      <rect x="0" y="0"  width="44" height="20" fill="#FFAB91"/>
+      <rect x="0" y="0"  width="44" height="5"  fill="#FFCCBC" opacity="0.7"/>
+      <rect x="0" y="8"  width="44" height="4"  fill="#FF8A65" opacity="0.5"/>
+      <rect x="0" y="14" width="44" height="4"  fill="#FF7043" opacity="0.4"/>
+      <rect x="4" y="2"  width="6" height="5"   fill="#FF8A65" rx="1"/>
+      <rect x="14" y="2" width="6" height="5"   fill="#FF7043" rx="1" opacity="0.8"/>
+    </g>
+    <circle cx="22" cy="22" r="21" fill="none" stroke="#1A1A1A" stroke-width="1.5"/>
   </svg>`,
   // Lane 3: たまご (egg) — 黄
   `<svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="22" cy="22" r="21" fill="#2D3B2D"/>
-    <circle cx="22" cy="22" r="18" fill="#F5EFE0"/>
-    <circle cx="22" cy="22" r="14" fill="#FFD740"/>
-    <ellipse cx="22" cy="18" rx="9" ry="3" fill="#FFE57F" opacity="0.65"/>
-    <ellipse cx="22" cy="26" rx="8" ry="2.5" fill="#FFAB00" opacity="0.4"/>
-    <circle cx="16" cy="16" r="3" fill="rgba(255,255,255,0.28)"/>
+    <g clip-path="url(#note-clip)">
+      <rect x="0" y="0"  width="44" height="44" fill="#F5EFE0"/>
+      <rect x="0" y="26" width="44" height="18" fill="#EBE4D0"/>
+      <rect x="0" y="30" width="44" height="5"  fill="#E0D8C0" opacity="0.6"/>
+      <rect x="0" y="19" width="44" height="5"  fill="#2D3B2D"/>
+      <rect x="0" y="0"  width="44" height="20" fill="#FFD740"/>
+      <rect x="0" y="0"  width="44" height="5"  fill="#FFE57F" opacity="0.65"/>
+      <rect x="0" y="14" width="44" height="5"  fill="#FFAB00" opacity="0.35"/>
+    </g>
+    <circle cx="22" cy="22" r="21" fill="none" stroke="#1A1A1A" stroke-width="1.5"/>
   </svg>`,
 ];
 
@@ -739,11 +937,11 @@ function hitNote(n, perfect) {
   if (perfect) {
     perfects++;
     score += Math.round(300 * mul);
-    showJudge('PERFECT', '#fff');
+    showJudge('PERFECT', '#FFE566');
   } else {
     goods++;
     score += Math.round(100 * mul);
-    showJudge('GOOD', '#aaa');
+    showJudge('GOOD', '#44EEB8');
   }
   charPose(['pose-left','pose-right','pose-up','pose-down'][n.lane]);
   updateHUD();
@@ -752,7 +950,7 @@ function hitNote(n, perfect) {
 function registerMiss(lane) {
   misses++; combo = 0;
   missStreak++;
-  showJudge('MISS', '#e44');
+  showJudge('MISS', '#FF4455');
   const fl = document.createElement('div');
   fl.className = 'miss-flash';
   laneEls[lane].appendChild(fl);
@@ -767,9 +965,56 @@ function registerMiss(lane) {
   updateHUD();
 }
 
+// ============================================================
+// ピクセルアート判定テキスト
+// ============================================================
+const PIXEL_FONT = {
+  P: ['11110','10001','10001','11110','10000','10000','10000'],
+  E: ['11111','10000','10000','11110','10000','10000','11111'],
+  R: ['11110','10001','10001','11110','10100','10010','10001'],
+  F: ['11111','10000','10000','11110','10000','10000','10000'],
+  C: ['01111','10000','10000','10000','10000','10000','01111'],
+  T: ['11111','00100','00100','00100','00100','00100','00100'],
+  G: ['01111','10000','10000','10111','10001','10001','01110'],
+  O: ['01110','10001','10001','10001','10001','10001','01110'],
+  D: ['11110','10001','10001','10001','10001','10001','11110'],
+  M: ['10001','11011','10101','10001','10001','10001','10001'],
+  I: ['11111','00100','00100','00100','00100','00100','11111'],
+  S: ['01111','10000','10000','01110','00001','00001','11110'],
+};
+
+function makeJudgeSVG(word, color) {
+  const S   = 4;              // 1ピクセル = 4px
+  const CW  = 5, CH = 7;     // 文字サイズ (pixel)
+  const GAP = 1;              // 文字間 (pixel)
+  const SH  = 2;              // 影オフセット (px)
+  const step  = (CW + GAP) * S;
+  const totalW = word.length * step - GAP * S + SH;
+  const totalH = CH * S + SH;
+
+  let shadow = '', main = '';
+  word.split('').forEach((ch, ci) => {
+    const rows = PIXEL_FONT[ch];
+    if (!rows) return;
+    const xOff = ci * step;
+    rows.forEach((row, ri) => {
+      [...row].forEach((bit, bi) => {
+        if (bit !== '1') return;
+        const x = xOff + bi * S, y = ri * S;
+        shadow += `<rect x="${x + SH}" y="${y + SH}" width="${S}" height="${S}"/>`;
+        main   += `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${color}"/>`;
+      });
+    });
+  });
+
+  return `<svg viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}" xmlns="http://www.w3.org/2000/svg" style="image-rendering:pixelated;display:block">
+    <g fill="rgba(0,0,0,0.45)">${shadow}</g>
+    ${main}
+  </svg>`;
+}
+
 function showJudge(text, color) {
-  judgeEl.textContent = text;
-  judgeEl.style.color = color;
+  judgeEl.innerHTML = makeJudgeSVG(text, color);
   judgeEl.classList.remove('show');
   void judgeEl.offsetWidth;
   judgeEl.classList.add('show');
@@ -806,6 +1051,11 @@ function updateHUD() {
 }
 
 function startGame() {
+  // 選択トラックのBPM/BEAT/BAR を設定
+  const track = TRACKS[selectedTrackIdx];
+  BPM = track.bpm; BEAT = 60 / BPM; BAR = BEAT * 4;
+  currentScheduleBar = track.fn;
+
   // Reset
   score = combo = maxCombo = perfects = goods = misses = chartIdx = missStreak = 0;
   lastBeatIdx = -1;
@@ -813,6 +1063,8 @@ function startGame() {
   activeNotes = [];
   laneEls.forEach(l => l.querySelectorAll('.note,.hit-burst,.miss-flash').forEach(e => e.remove()));
   progress.style.width = '0%';
+
+  document.getElementById('quit-btn').classList.add('visible');
 
   calcLaneDims();
   chart = generateChart(SONG_DUR);
@@ -828,15 +1080,33 @@ function startGame() {
     const t0 = audioCtx.currentTime + 0.1;
     songStartTime = t0;
     startMusic(SONG_DUR, t0);
+    if (window.__startDance) window.__startDance(BPM);
     cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(gameLoop);
   });
 }
 
+function quitToMenu() {
+  gameRunning = false;
+  stopMusic();
+  if (window.__stopDance) window.__stopDance();
+  cancelAnimationFrame(rafId);
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  activeNotes = [];
+  laneEls.forEach(l => l.querySelectorAll('.note,.hit-burst,.miss-flash').forEach(e => e.remove()));
+  progress.style.width = '0%';
+  document.getElementById('quit-btn').classList.remove('visible');
+  document.getElementById('result-screen').style.display = 'none';
+  document.getElementById('start-screen').style.display  = 'block';
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
 function endGame() {
   gameRunning = false;
   stopMusic();
+  if (window.__stopDance) window.__stopDance();
   cancelAnimationFrame(rafId);
+  document.getElementById('quit-btn').classList.remove('visible');
 
   const tot = perfects + goods + misses;
   const acc = tot > 0 ? (perfects * 100 + goods * 50) / (tot * 100) * 100 : 100;
@@ -876,6 +1146,16 @@ window.addEventListener('keydown', e => {
   if ([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
 });
 
+document.getElementById('quit-btn').addEventListener('click', quitToMenu);
+
+document.querySelectorAll('.track-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.track-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedTrackIdx = parseInt(btn.dataset.track);
+  });
+});
+
 document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('overlay').classList.add('hidden');
   startGame();
@@ -908,146 +1188,236 @@ document.getElementById('overlay').addEventListener('touchend', e => {
 });
 
 // ============================================================
-// ピクセルアート キャラクター (しろいポン風 16×18ドット)
+// ピクセルアート キャラクター (しろいポン風)
 // ============================================================
 (function () {
-  // カラーパレット
   const PAL = [
     null,        // 0: transparent
     '#f2f2f2',   // 1: 白ボディ
-    '#d0d0d0',   // 2: 薄グレー (耳の内側・影)
+    '#d0d0d0',   // 2: 薄グレー
     '#282828',   // 3: 輪郭
     '#1a1a1a',   // 4: 目
   ];
 
-  // スプライト定義 16×18 (-1=目スロット)
-  // しろいポン風: クマ耳(内側凹)、丸ボディ、腕あり、丸足
+  // しろいポン: 丸耳・丸ボディ 16×18 (腕は別途描画)
   const SP = [
   //  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
-    [ 0, 0, 0, 3, 1, 3, 0, 0, 0, 3, 1, 3, 0, 0, 0, 0], //  0 耳頂点(1px)
-    [ 0, 0, 3, 1, 1, 1, 3, 0, 3, 1, 1, 1, 3, 0, 0, 0], //  1 耳(3px)
-    [ 0, 0, 3, 1, 1, 3, 0, 0, 0, 3, 1, 1, 3, 0, 0, 0], //  2 耳根・内側凹(2px)
-    [ 0, 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0, 0], //  3 頭頂(9px)
-    [ 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0], //  4 頭(11px)
-    [ 0, 3, 1, 1,-1,-1, 1, 1,-1,-1, 1, 1, 1, 3, 0, 0], //  5 目A(12px)
-    [ 0, 3, 1, 1,-1,-1, 1, 1,-1,-1, 1, 1, 1, 3, 0, 0], //  6 目B
-    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0], //  7 頬(12px)
-    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], //  8 腕ブロブ(14px)
-    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], //  9 腕ブロブ
-    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0], // 10 ボディ(12px)
-    [ 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0], // 11 ボディ下(10px)
+    [ 0, 0, 0, 0, 3, 1, 3, 0, 0, 3, 1, 3, 0, 0, 0, 0], //  0 耳 (丸小)
+    [ 0, 0, 0, 3, 1, 1, 3, 0, 3, 1, 1, 3, 0, 0, 0, 0], //  1 耳根
+    [ 0, 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0, 0], //  2 頭頂 (10px)
+    [ 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0], //  3 頭 (12px)
+    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3], //  4 顔 突起A (16px)
+    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], //  5 顔 (目の行 14px)
+    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3], //  6 顔 突起B (16px)
+    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3], //  7 腕ライン (16px)
+    [ 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3], //  8 腕ライン
+    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], //  9 ボディ (14px)
+    [ 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0], // 10 ボディ
+    [ 0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 0], // 11 ボディ下 (12px)
     [ 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0], // 12 底輪郭
     [ 0, 0, 0, 3, 1, 1, 3, 0, 3, 1, 1, 3, 0, 0, 0, 0], // 13 足首
     [ 0, 0, 0, 3, 1, 1, 3, 0, 3, 1, 1, 3, 0, 0, 0, 0], // 14 足
-    [ 0, 0, 3, 1, 1, 1, 3, 0, 3, 1, 1, 1, 3, 0, 0, 0], // 15 足先(幅広)
+    [ 0, 0, 3, 1, 1, 1, 3, 0, 3, 1, 1, 1, 3, 0, 0, 0], // 15 足先
     [ 0, 0, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3, 0, 0, 0], // 16 足底
     [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 17 余白
   ];
-  const ROWS = SP.length, COLS = SP[0].length;
+  const ROWS = SP.length;    // 18
+  const COLS = SP[0].length; // 16
+  const ARM_PAD = 5;         // 腕用の余白 (両側)
+  const CW = COLS + ARM_PAD * 2; // キャンバス幅 = 26
 
-  // 目の位置 (左: col4-5, 右: col8-9, row5-6)
-  const LE = {c:4, r:5}; // left eye
-  const RE = {c:8, r:5}; // right eye
+  const LE = {c:3, r:5}; // 左目 (3px幅ダッシュ)
+  const RE = {c:9, r:5}; // 右目
 
-  let _eyeState = 'normal'; // 'normal' | 'cross' | 'dizzy'
+  let _eyeState = 'normal';
   let _dizzyAngle = 0;
-  let _dizzyRaf = null;
+  let _dancePhase = 0;
+  let _totalBeats = 0;
+  let _danceActive = false;
+  let _danceStartTime = 0;
+  let _danceBpm = 128;
+  let _rafId = null;
+
+  // --- ダンスムーブ定義 (5種, 各2小節=8拍) ---
+  function _moveAngles(move, t) {
+    const pi = Math.PI;
+    switch (move) {
+      case 0: // シーソー: 左右交互
+        return [ Math.sin(t) * 0.65,
+                -Math.sin(t) * 0.65];
+      case 1: // 両手バウンス: 毎拍一緒に跳ねる
+        return [-Math.abs(Math.sin(t * 2)) * 0.75,
+                -Math.abs(Math.sin(t * 2)) * 0.75];
+      case 2: // ウェーブ: 右から左へ遅れて波
+        return [ Math.sin(t + pi * 0.5) * 0.7,
+                -Math.sin(t) * 0.7];
+      case 3: // 高速ポンプ: 倍速シーソー
+        return [ Math.sin(t * 2) * 0.5,
+                -Math.sin(t * 2) * 0.5];
+      case 4: // ビッグスイング: 大振り非対称
+        return [ Math.sin(t) * 0.9 + Math.sin(t * 2) * 0.2,
+                -Math.sin(t + pi * 0.4) * 0.85];
+      default: return [0, 0];
+    }
+  }
+
+  // --- 腕・手を描画 ---
+  function drawArms(ctx, s, phase, totalBeats) {
+    const t = phase * Math.PI * 2;
+    const BEATS_PER_MOVE = 8;
+    const NUM_MOVES = 5;
+    const moveIdx  = Math.floor(totalBeats / BEATS_PER_MOVE);
+    const cur  = moveIdx % NUM_MOVES;
+    const prev = (moveIdx - 1 + NUM_MOVES) % NUM_MOVES;
+    // 冒頭0.5拍でブレンド (ジャンプを隠す)
+    const blend = Math.min(1, (totalBeats % BEATS_PER_MOVE) * 2);
+    const [clA, crA] = _moveAngles(cur,  t);
+    const [plA, prA] = _moveAngles(prev, t);
+    const leftAngle  = plA + (clA - plA) * blend;
+    const rightAngle = prA + (crA - prA) * blend;
+
+    const sy = 7.5 * s;            // 肩の高さ (row 7-8 中間)
+    const lx = ARM_PAD * s;        // 左肩X (col 0)
+    const rx = (ARM_PAD + 15) * s; // 右肩X (col 15)
+
+    const L  = 3 * s; // 腕の長さ
+    const AH = 2 * s; // 腕の太さ
+    const HW = 2 * s; // 手の幅
+    const HH = 3 * s; // 手の高さ
+
+    function oneArm(shx, shy, angle, isLeft) {
+      ctx.save();
+      ctx.translate(shx, shy);
+      ctx.rotate(angle);
+      const ax = isLeft ? -L : 0; // 腕の開始X (左は負方向)
+      // 腕アウトライン → フィル
+      ctx.fillStyle = PAL[3];
+      ctx.fillRect(ax - s, -AH / 2 - s, L + s * 2, AH + s * 2);
+      ctx.fillStyle = PAL[1];
+      ctx.fillRect(ax, -AH / 2, L, AH);
+      // 手フィルのみ
+      const hx = isLeft ? ax - HW : ax + L;
+      ctx.fillStyle = PAL[1];
+      ctx.fillRect(hx, -HH / 2, HW, HH);
+      ctx.restore();
+    }
+
+    oneArm(lx, sy, leftAngle, true);
+    oneArm(rx, sy, rightAngle, false);
+  }
 
   // --- スプライト描画 ---
-  function draw(ctx, s, es, angle) {
-    ctx.clearRect(0, 0, COLS * s, ROWS * s);
+  function draw(ctx, s, es, dizzyAngle, armPhase, totalBeats) {
+    const ox = ARM_PAD * s;
+    ctx.clearRect(0, 0, CW * s, ROWS * s);
     ctx.imageSmoothingEnabled = false;
 
-    // ベース描画 (-1 スロットはスキップ)
+    // 腕を先に描く (ボディが上に重なり肩が自然に見える)
+    drawArms(ctx, s, armPhase || 0, totalBeats || 0);
+
+    // ボディ
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const v = SP[r][c];
-        if (v <= 0) continue;
-        ctx.fillStyle = PAL[v];
-        ctx.fillRect(c * s, r * s, s, s);
+        if (v === 0) continue;
+        ctx.fillStyle = v === -1 ? PAL[1] : PAL[v]; // -1(目スロット)は白で埋める
+        ctx.fillRect(ox + c * s, r * s, s, s);
       }
     }
 
-    // 目描画
-    const lx = (LE.c + 1) * s, rx = (RE.c + 1) * s;
-    const ey = (LE.r + 1) * s; // eye center Y
-
+    // 目 (2×4 横長)
+    ctx.fillStyle = PAL[4];
     if (es === 'normal') {
-      // ハの字: 左目=/ (外低・内高), 右目=\ (内高・外低)
-      ctx.fillStyle = PAL[4];
-      ctx.fillRect((LE.c + 0) * s, (LE.r + 1) * s, s, s); // 左外・低
-      ctx.fillRect((LE.c + 1) * s, (LE.r + 0) * s, s, s); // 左内・高
-      ctx.fillRect((RE.c + 0) * s, (RE.r + 0) * s, s, s); // 右内・高
-      ctx.fillRect((RE.c + 1) * s, (RE.r + 1) * s, s, s); // 右外・低
+      ctx.fillRect(ox + LE.c * s, LE.r * s, s * 3, s); // 左目 3×1
+      ctx.fillRect(ox + RE.c * s, RE.r * s, s * 3, s); // 右目 3×1
     } else if (es === 'cross') {
-      // ✕ 目
-      const half = s * 1.1;
-      ctx.strokeStyle = PAL[3];
-      ctx.lineWidth = s * 0.75;
-      ctx.lineCap = 'square';
-      for (const cx of [lx, rx]) {
-        ctx.beginPath(); ctx.moveTo(cx - half, ey - half); ctx.lineTo(cx + half, ey + half); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx + half, ey - half); ctx.lineTo(cx - half, ey + half); ctx.stroke();
+      // ✕目 (ピクセルで描画)
+      const ex = [ox + LE.c * s, ox + RE.c * s];
+      const ey = LE.r * s;
+      for (const x of ex) {
+        ctx.fillRect(x,         ey,         s, s); ctx.fillRect(x + s*3, ey,         s, s);
+        ctx.fillRect(x + s,     ey + s,     s, s); ctx.fillRect(x + s*2, ey + s,     s, s);
+        ctx.fillRect(x + s,     ey - s,     s, s); ctx.fillRect(x + s*2, ey - s,     s, s);
+        ctx.fillRect(x,         ey + s*2,   s, s); ctx.fillRect(x + s*3, ey + s*2,   s, s);
       }
     } else if (es === 'dizzy') {
-      // ぐるぐる目 (2重弧がスピン)
-      const r1 = s * 1.1, r2 = s * 0.5;
-      ctx.lineWidth = Math.max(1, s * 0.45);
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = PAL[3];
-      for (const cx of [lx, rx]) {
-        ctx.beginPath(); ctx.arc(cx, ey, r1, angle, angle + Math.PI * 1.4); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cx, ey, r2, angle + Math.PI, angle + Math.PI * 2.3); ctx.stroke();
-        ctx.fillStyle = PAL[3];
-        ctx.fillRect(cx - s * 0.2, ey - s * 0.2, s * 0.4, s * 0.4);
+      // ～目 (波型ピクセル、dizzyAngleで交互にパタパタ)
+      const phase = Math.round(dizzyAngle / 1.2) % 2;
+      const offA = phase === 0 ? [1,0,1,0] : [0,1,0,1];
+      for (const x of [ox + LE.c * s, ox + RE.c * s]) {
+        for (let i = 0; i < 4; i++) {
+          ctx.fillRect(x + i * s, (LE.r + offA[i]) * s, s, s);
+        }
       }
     }
   }
 
-  // --- メインキャラ (ゲーム画面) ---
+  // --- メインキャラ ---
   const mainC = document.getElementById('character');
-  mainC.width  = COLS * 11;
+  mainC.width  = CW * 11;
   mainC.height = ROWS * 11;
   const mainCtx = mainC.getContext('2d');
 
   function renderMain() {
-    draw(mainCtx, 11, _eyeState, _dizzyAngle);
+    draw(mainCtx, 11, _eyeState, _dizzyAngle, _dancePhase, _totalBeats);
   }
 
-  function startDizzy() {
-    function loop() {
-      _dizzyAngle += 0.13;
-      renderMain();
-      if (_eyeState === 'dizzy') _dizzyRaf = requestAnimationFrame(loop);
+  // --- 統合アニメーションループ ---
+  function animLoop() {
+    if (_danceActive) {
+      const elapsed = (performance.now() - _danceStartTime) / 1000;
+      _totalBeats = elapsed * _danceBpm / 60;
+      _dancePhase = (_totalBeats / 4) % 1; // 1サイクル = 1小節(4拍)
     }
-    _dizzyRaf = requestAnimationFrame(loop);
+    if (_eyeState === 'dizzy') _dizzyAngle += 0.13;
+    renderMain();
+    if (_danceActive || _eyeState === 'dizzy') {
+      _rafId = requestAnimationFrame(animLoop);
+    } else {
+      _rafId = null;
+    }
   }
 
-  // 外部から目ステートを切り替える関数
-  window.__setEyeState = function (state) {
-    if (_eyeState === 'dizzy' && state === 'cross') return; // dizzy 優先
-    if (_dizzyRaf) { cancelAnimationFrame(_dizzyRaf); _dizzyRaf = null; }
+  function startLoop() {
+    if (!_rafId) _rafId = requestAnimationFrame(animLoop);
+  }
+
+  // --- 外部インターフェース ---
+  window.__startDance = function(bpm) {
+    _danceBpm = bpm;
+    _danceActive = true;
+    _danceStartTime = performance.now();
+    startLoop();
+  };
+
+  window.__stopDance = function() {
+    _danceActive = false;
+    _dancePhase = 0;
+    renderMain();
+  };
+
+  window.__setEyeState = function(state) {
+    if (_eyeState === 'dizzy' && state === 'cross') return;
     if (state === 'cross_end') {
-      // ✕ 終了: dizzy でなければ normal へ
       if (_eyeState !== 'dizzy') { _eyeState = 'normal'; renderMain(); }
       return;
     }
     _eyeState = state;
-    if (state === 'dizzy') { _dizzyAngle = 0; startDizzy(); }
+    if (state === 'dizzy') { _dizzyAngle = 0; startLoop(); }
     else renderMain();
   };
 
   renderMain();
 
-  // --- オーバーレイ用 小キャラ (静的) ---
+  // --- オーバーレイ用 小キャラ ---
   function makeSmall(slotId, scale) {
     const slot = document.getElementById(slotId);
     if (!slot) return;
     const c = document.createElement('canvas');
-    c.width  = COLS * scale;
+    c.width  = CW * scale;
     c.height = ROWS * scale;
-    const ctx = c.getContext('2d');
-    draw(ctx, scale, 'normal', 0);
+    c.style.imageRendering = 'pixelated';
+    draw(c.getContext('2d'), scale, 'normal', 0, 0);
     slot.appendChild(c);
   }
   makeSmall('overlay-char-slot', 6);
