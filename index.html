@@ -412,51 +412,60 @@
     font-size: 7px; color: #888; letter-spacing: 3px;
   }
 
-  /* ---- H: カウントダウン ---- */
+  /* ---- A: ステージ背景 ---- */
+  #stage-bg { position:absolute; inset:0; pointer-events:none; z-index:0; }
+
+  /* ---- H: ダイアログ ---- */
   #countdown-overlay {
     display: none; position: fixed; inset: 0; z-index: 600;
-    background: rgba(0,0,0,0.88); flex-direction: column;
-    align-items: center; justify-content: center; gap: 20px;
-    transition: background 0s steps(1,end);
+    flex-direction: column; justify-content: flex-end;
   }
   #countdown-overlay.active { display: flex; }
+  #countdown-overlay.go-mode { justify-content: center; align-items: center; background: rgba(0,0,0,0.55); }
+  #countdown-overlay.go-mode #dialogue-box { display: none; }
 
-
-  #countdown-char-slot {
-    image-rendering: pixelated;
-    animation: cdBob 0.3s steps(1,end) alternate infinite;
+  #dialogue-box {
+    background: rgba(0,0,0,0.92);
+    border: 3px solid #ffffff;
+    box-shadow: 5px 5px 0 rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.06);
+    margin: 0 20px 28px;
+    padding: 14px 16px;
+    display: flex; gap: 14px; align-items: flex-start;
   }
-  #countdown-char-slot.jump {
-    animation: cdJump 0.32s steps(4,end) forwards !important;
+  #dialogue-portrait {
+    flex-shrink: 0; border: 2px solid #444; padding: 4px;
+    background: #08080f; image-rendering: pixelated;
   }
-  @keyframes cdBob  { from{transform:translateY(0)} to{transform:translateY(-8px)} }
-  @keyframes cdJump {
-    0%  { transform: translateY(0)    scale(1); }
-    25% { transform: translateY(-20px) scale(1.12); }
-    65% { transform: translateY(-10px) scale(1.05); }
-    100%{ transform: translateY(0)    scale(1); }
-  }
-
-  #countdown-ready {
+  #dialogue-content { flex: 1; min-width: 0; }
+  #dialogue-speaker {
     font-family: 'Press Start 2P', monospace;
-    font-size: 11px; letter-spacing: 6px; color: #555;
-    text-shadow: 2px 2px 0 #222;
-    margin-bottom: -8px;
+    font-size: 8px; color: #ffee00; letter-spacing: 2px; margin-bottom: 8px;
   }
-  #countdown-number {
-    min-height: 80px; display:flex; align-items:center; justify-content:center;
-  }
-  #countdown-number .cd-num {
+  #dialogue-text {
     font-family: 'Press Start 2P', monospace;
-    font-size: 56px; letter-spacing: 4px;
-    image-rendering: pixelated;
+    font-size: 9px; color: #fff; letter-spacing: 1px;
+    line-height: 2.2; min-height: 2.6em; white-space: pre-wrap;
   }
-  #countdown-number .cd-num.is-go { font-size: 40px; letter-spacing: 6px; }
-  .cd-num-pop { animation: cdNumPop 0.28s steps(3,end) forwards; }
-  @keyframes cdNumPop {
-    0%  { transform: scale(1.5); opacity: 1; }
-    60% { transform: scale(0.94); opacity: 1; }
-    100%{ transform: scale(1.0); opacity: 1; }
+  #dialogue-cursor {
+    font-size: 9px; color: #aaa; margin-top: 5px;
+    animation: dlgBlink 0.5s steps(1,end) infinite; visibility: hidden;
+  }
+  #dialogue-cursor.show { visibility: visible; }
+  @keyframes dlgBlink { 0%{opacity:1} 50%{opacity:0} }
+
+  #dialogue-go {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 54px; color: #44ff88;
+    text-shadow: 5px 5px 0 #004422, 10px 10px 0 #001a0d;
+    opacity: 0; pointer-events: none;
+  }
+  #dialogue-go.pop { animation: goFlash 0.54s steps(5,end) forwards; }
+  @keyframes goFlash {
+    0%   { opacity:1; transform: scale(1.5); }
+    50%  { opacity:1; transform: scale(1.0); }
+    100% { opacity:0; transform: scale(0.85); }
   }
 
   /* ---- I: スコアバウンス ---- */
@@ -591,9 +600,15 @@
 <body>
 
 <div id="countdown-overlay">
-  <div id="countdown-ready"></div>
-  <div id="countdown-char-slot"></div>
-  <div id="countdown-number"></div>
+  <div id="dialogue-box">
+    <div id="dialogue-portrait"></div>
+    <div id="dialogue-content">
+      <div id="dialogue-speaker">ポン</div>
+      <div id="dialogue-text"></div>
+      <div id="dialogue-cursor">▼</div>
+    </div>
+  </div>
+  <div id="dialogue-go">GO!</div>
 </div>
 <div id="progress"></div>
 <div id="gameover-overlay" style="display:none;position:fixed;inset:0;z-index:450;background:rgba(0,0,0,0.82);flex-direction:column;align-items:center;justify-content:center;gap:14px;pointer-events:none;">
@@ -654,6 +669,7 @@
 
 <div id="game">
   <div id="stage">
+    <canvas id="stage-bg"></canvas>
     <canvas id="starfield"></canvas>
     <div id="combo-bg"></div>
     <div id="combo-big"></div>
@@ -1120,13 +1136,78 @@ function scheduleBarAmbi(t, bar) {
   arp.forEach(n => arpAmbi(t + n.st * s, n.fr, s * 0.88));
 }
 
+// ---- AMBIENT 専用チャート ----
+// Intro(bar<8): 4つ打ちのみ
+// Build(bar<18): 4つ打ち + 8分音符を徐々に追加
+// Main(bar<34) : 全8分 + bar22〜で16分シンコペ + bar28〜さらに増加
+// Break(bar<42): ハーフタイム(2・4拍) + 少量
+// Outro(42〜)  : 最高密度、16分音符多め
+function generateChartAmbi(songDur) {
+  const notes = [];
+  const totalBars = Math.floor(songDur / BAR);
+  const beatLanes = [
+    [0,1,2,3],[1,2,3,0],[2,3,0,1],[3,0,1,2],
+    [0,3,2,1],[1,0,3,2],[3,1,0,2],[2,0,1,3],
+  ];
+  const eighthLanes = [
+    [2,0,3,1],[3,1,0,2],[1,3,2,0],[0,2,1,3],
+    [1,2,0,3],[3,0,2,1],[0,1,3,2],[2,3,1,0],
+  ];
+  for (let bar = 1; bar < totalBars; bar++) {
+    const barT = bar * BAR;
+    if (barT >= songDur - 4) break;
+    const sec = bar < 8 ? 0 : bar < 18 ? 1 : bar < 34 ? 2 : bar < 42 ? 3 : 4;
+    const bp  = beatLanes [bar % beatLanes.length];
+    const ep  = eighthLanes[bar % eighthLanes.length];
+
+    if (sec === 0) {
+      // Intro: 4つ打ちのみ
+      [0,4,8,12].forEach((st,bi) => notes.push({ time: barT + st*BEAT/4, lane: bp[bi] }));
+
+    } else if (sec === 1) {
+      // Build: 4つ打ち + 8分音符を段階的に追加
+      [0,4,8,12].forEach((st,bi) => notes.push({ time: barT + st*BEAT/4, lane: bp[bi] }));
+      const eSteps = bar < 12 ? [2,10] : [2,6,10,14];
+      eSteps.forEach((st,ei) => notes.push({ time: barT + st*BEAT/4, lane: ep[ei] }));
+
+    } else if (sec === 2) {
+      // Main: 全8分音符 + 16分音符シンコペ
+      [0,4,8,12].forEach((st,bi) => notes.push({ time: barT + st*BEAT/4, lane: bp[bi] }));
+      [2,6,10,14].forEach((st,ei) => notes.push({ time: barT + st*BEAT/4, lane: ep[ei] }));
+      if (bar >= 22) {
+        const sA = bar % 2 === 0 ? [3,11] : [7,15];
+        sA.forEach(st => notes.push({ time: barT + st*BEAT/4, lane: (bp[st%4]+1)%4 }));
+      }
+      if (bar >= 28) {
+        const sB = bar % 2 === 0 ? [5,13] : [1,9];
+        sB.forEach(st => notes.push({ time: barT + st*BEAT/4, lane: (ep[st%4]+2)%4 }));
+      }
+
+    } else if (sec === 3) {
+      // Break: ハーフタイム(2・4拍) + 8分1個
+      [4,12].forEach((st,bi) => notes.push({ time: barT + st*BEAT/4, lane: bp[bi] }));
+      notes.push({ time: barT + (bar%2===0?6:10)*BEAT/4, lane: ep[0] });
+
+    } else {
+      // Outro: 最高密度
+      [0,4,8,12].forEach((st,bi) => notes.push({ time: barT + st*BEAT/4, lane: bp[bi] }));
+      [2,6,10,14].forEach((st,ei) => notes.push({ time: barT + st*BEAT/4, lane: ep[ei] }));
+      const sA = bar%2===0 ? [3,11] : [7,15];
+      const sB = bar%2===0 ? [5,13] : [1,9];
+      [...sA,...sB].forEach(st => notes.push({ time: barT + st*BEAT/4, lane: (bp[st%4]+ep[st%4])%4 }));
+    }
+  }
+  notes.sort((a,b) => a.time - b.time);
+  return notes;
+}
+
 // ---- トラック定義 ----
 const TRACKS = [
   { name: 'DANCE', bpm: 128, fn: scheduleBarDance },
   { name: 'CHIP',  bpm: 150, fn: scheduleBarChip  },
   { name: 'RPG',   bpm: 100, fn: scheduleBarRpg,  chartFn: generateChartDense },
   { name: 'LOFI',  bpm: 80,  fn: scheduleBarLofi  },
-  { name: 'AMBI',  bpm: 124, fn: scheduleBarAmbi  },
+  { name: 'AMBI',  bpm: 124, fn: scheduleBarAmbi,  chartFn: generateChartAmbi },
 ];
 let selectedTrackIdx = 0;
 
@@ -1216,60 +1297,170 @@ function stopMusic() {
 })();
 
 // ============================================================
-// H: カウントダウン
+// A: ステージ背景
 // ============================================================
+let bgScrollX = 0, bgCurrentScene = -1, bgFlash = 0;
+
+const BG_SCENES = [
+  // 0: DANCE - ネオン都市夜景
+  [{ p:0,    top:'#050514', bot:'#0d0830', sil:'#080720', t:0 },
+   { p:0.30, top:'#0c0330', bot:'#1c0858', sil:'#090220', t:0 },
+   { p:0.55, top:'#1a0040', bot:'#4010a0', sil:'#0d0028', t:0 },
+   { p:0.80, top:'#500020', bot:'#c02060', sil:'#280010', t:0 }],
+  // 1: CHIP - サイバー空間
+  [{ p:0,    top:'#020310', bot:'#060828', sil:'#040820', t:0 },
+   { p:0.25, top:'#003018', bot:'#006838', sil:'#002210', t:2 },
+   { p:0.50, top:'#003850', bot:'#0070a8', sil:'#002840', t:0 },
+   { p:0.75, top:'#000038', bot:'#1800a0', sil:'#000022', t:1 }],
+  // 2: RPG - 幻想の城
+  [{ p:0,    top:'#060214', bot:'#0e0628', sil:'#050012', t:1 },
+   { p:0.25, top:'#0a0830', bot:'#201870', sil:'#080020', t:2 },
+   { p:0.55, top:'#102060', bot:'#2040a0', sil:'#082040', t:1 },
+   { p:0.80, top:'#300050', bot:'#6000c0', sil:'#180030', t:2 }],
+  // 3: LOFI - 深夜の街
+  [{ p:0,    top:'#080510', bot:'#100820', sil:'#060410', t:0 },
+   { p:0.35, top:'#0d0818', bot:'#1e1030', sil:'#0a0614', t:0 },
+   { p:0.65, top:'#0a0820', bot:'#181840', sil:'#080816', t:2 }],
+  // 4: AMBIENT - 宇宙の旅
+  [{ p:0,    top:'#040820', bot:'#081840', sil:'#030612', t:2 },
+   { p:0.30, top:'#080030', bot:'#180080', sil:'#060020', t:1 },
+   { p:0.55, top:'#200060', bot:'#5000d0', sil:'#100030', t:2 },
+   { p:0.80, top:'#400060', bot:'#9000e0', sil:'#200040', t:1 }],
+];
+const SIL_PROFILES = [
+  // 0: 都市ビル
+  [0.32,0.18,0.40,0.22,0.45,0.20,0.35,0.26,0.42,0.16,0.37,0.20,0.30,0.18,0.44,0.24],
+  // 1: 城壁
+  [0.14,0.52,0.14,0.52,0.14,0.50,0.36,0.36,0.14,0.58,0.14,0.58,0.34,0.14,0.56,0.14],
+  // 2: 山岳
+  [0.10,0.20,0.36,0.50,0.38,0.22,0.10,0.15,0.28,0.44,0.54,0.42,0.24,0.10,0.18,0.35],
+];
+
+function hexToRgb(h) {
+  return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+}
+function getActiveBgScene() {
+  const prog = (gameRunning && audioCtx)
+    ? Math.max(0, Math.min(1, (audioCtx.currentTime - songStartTime) / SONG_DUR)) : 0;
+  const scenes = BG_SCENES[selectedTrackIdx] || BG_SCENES[0];
+  let scene = scenes[0], idx = 0;
+  for (let i = 0; i < scenes.length; i++) {
+    if (prog >= scenes[i].p) { scene = scenes[i]; idx = i; } else break;
+  }
+  return { scene, idx };
+}
+function drawBgFrame() {
+  const canvas = document.getElementById('stage-bg');
+  if (!canvas || !canvas.offsetWidth) { requestAnimationFrame(drawBgFrame); return; }
+  if (canvas.width !== canvas.offsetWidth)  canvas.width  = canvas.offsetWidth;
+  if (canvas.height !== canvas.offsetHeight) canvas.height = canvas.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  bgScrollX += 0.45;
+
+  const { scene, idx } = getActiveBgScene();
+  if (idx !== bgCurrentScene) { bgCurrentScene = idx; bgFlash = 1.0; }
+  bgFlash = Math.max(0, bgFlash - 0.06);
+
+  // 段階的スカイグラデーション
+  const BANDS = 6;
+  const [r1,g1,b1] = hexToRgb(scene.top), [r2,g2,b2] = hexToRgb(scene.bot);
+  for (let i = 0; i < BANDS; i++) {
+    const qt = Math.round((i/(BANDS-1))*4)/4;
+    ctx.fillStyle = `rgb(${Math.round(r1+(r2-r1)*qt)},${Math.round(g1+(g2-g1)*qt)},${Math.round(b1+(b2-b1)*qt)})`;
+    const y0 = Math.floor(i*h/BANDS);
+    ctx.fillRect(0, y0, w, Math.floor((i+1)*h/BANDS)-y0+1);
+  }
+  // シルエット
+  ctx.fillStyle = scene.sil;
+  const SEG = 12, profile = SIL_PROFILES[scene.t];
+  const count = Math.ceil(w/SEG)+2;
+  const off = Math.floor(bgScrollX/SEG);
+  const sub = Math.round(bgScrollX%SEG/2)*2;
+  for (let i = -1; i < count; i++) {
+    const pi = ((i+off)%profile.length+profile.length)%profile.length;
+    const bh = Math.round(profile[pi]*h/4)*4;
+    ctx.fillRect(i*SEG-sub, h-bh, SEG-1, bh);
+  }
+  // シーン切替フラッシュ
+  if (bgFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${bgFlash*0.22})`; ctx.fillRect(0,0,w,h); }
+  requestAnimationFrame(drawBgFrame);
+}
+
+// ============================================================
+// H: ダイアログ（RPG風）
+// ============================================================
+const TRACK_DIALOGUE = [
+  ['おどるポン！'],
+  ['おどるポン！'],
+  ['おどるポン！'],
+  ['おどるポン！'],
+  ['おどるポン！'],
+];
+
 function showCountdown(cb) {
-  const overlay  = document.getElementById('countdown-overlay');
-  const numEl    = document.getElementById('countdown-number');
-  const readyEl  = document.getElementById('countdown-ready');
-  const charSlot = document.getElementById('countdown-char-slot');
+  const overlay = document.getElementById('countdown-overlay');
+  const textEl  = document.getElementById('dialogue-text');
+  const cursor  = document.getElementById('dialogue-cursor');
+  const goEl    = document.getElementById('dialogue-go');
 
-  const BG_COLORS = ['rgba(60,0,0,0.88)', 'rgba(50,30,0,0.88)', 'rgba(50,50,0,0.88)', 'rgba(0,50,20,0.88)'];
-  const steps = [
-    { label: '3',  color: '#ff4455', bg: BG_COLORS[0] },
-    { label: '2',  color: '#ffaa00', bg: BG_COLORS[1] },
-    { label: '1',  color: '#ffee00', bg: BG_COLORS[2] },
-    { label: 'GO', color: '#44ff88', bg: BG_COLORS[3] },
-  ];
-
-  // ユーザージェスチャー中に AudioContext を作成・resume しておく（音楽タイミング改善）
+  // ユーザージェスチャー中に AudioContext を作成・resume
   if (audioCtx) { try { stopMusic(); audioCtx.close(); } catch(e){} }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.resume().catch(()=>{});
 
   if (window.__setEyeState) window.__setEyeState('normal');
-  overlay.style.background = 'rgba(0,0,0,0.88)';
-  readyEl.textContent = 'READY';
-  numEl.innerHTML   = '';
   overlay.classList.add('active');
 
-  let i = 0;
-  function tick() {
-    if (i >= steps.length) {
-      overlay.classList.remove('active');
-      overlay.style.background = '';
-      cb();
-      return;
-    }
-    const { label, color, bg } = steps[i++];
-    overlay.style.background = bg;
-    // キャラジャンプ
-    charSlot.classList.remove('jump');
-    void charSlot.offsetWidth;
-    charSlot.classList.add('jump');
-    setTimeout(() => charSlot.classList.remove('jump'), 340);
-    // 数字ポップ
-    const isGo = label === 'GO';
-    const shadow = color;
-    numEl.innerHTML = `<span class="cd-num${isGo ? ' is-go' : ''}" style="color:${color};text-shadow:4px 4px 0 ${shadow}88,8px 8px 0 ${shadow}33;">${label}</span>`;
-    numEl.classList.remove('cd-num-pop');
-    void numEl.offsetWidth;
-    numEl.classList.add('cd-num-pop');
-    setTimeout(tick, i < steps.length ? 720 : 360);
+  const lines = TRACK_DIALOGUE[selectedTrackIdx] || TRACK_DIALOGUE[0];
+  let lineIdx = 0, isTyping = false, canAdvance = false, typeTimer = null;
+
+  function typewrite(text) {
+    textEl.textContent = '';
+    cursor.classList.remove('show');
+    canAdvance = false; isTyping = true;
+    let ci = 0;
+    typeTimer = setInterval(() => {
+      if (ci < text.length) { textEl.textContent += text[ci++]; }
+      else { clearInterval(typeTimer); isTyping = false; canAdvance = true; cursor.classList.add('show'); }
+    }, 55);
   }
 
-  // "READY" を0.7秒見せてからカウント開始
-  setTimeout(tick, 700);
+  function advance() {
+    if (isTyping) {
+      clearInterval(typeTimer); isTyping = false;
+      textEl.textContent = lines[lineIdx];
+      cursor.classList.add('show'); canAdvance = true;
+      return;
+    }
+    if (!canAdvance) return;
+    lineIdx++;
+    if (lineIdx < lines.length) {
+      typewrite(lines[lineIdx]);
+    } else {
+      canAdvance = false; cursor.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      overlay.removeEventListener('click', onTap);
+      overlay.classList.add('go-mode');
+      goEl.classList.add('pop');
+      setTimeout(() => {
+        overlay.classList.remove('active', 'go-mode');
+        goEl.classList.remove('pop');
+        cb();
+      }, 560);
+    }
+  }
+
+  function onKey(e) {
+    if ([' ','Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      e.preventDefault(); advance();
+    }
+  }
+  function onTap() { advance(); }
+
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', onTap);
+  typewrite(lines[0]);
 }
 
 // ============================================================
@@ -1540,7 +1731,7 @@ function gameLoop() {
   // B: 敵スポーン・更新
   if (now >= _nextEnemySpawn && enemies.filter(e => !e.defeated).length < 3) {
     spawnEnemy();
-    _nextEnemySpawn = now + 3.5 + Math.random() * 4.5;
+    _nextEnemySpawn = now + 2.5 + Math.random() * 3.0;
   }
   updateEnemies();
 
@@ -1853,7 +2044,8 @@ function startGame() {
   setFaceState('normal');
   activeNotes = [];
   enemies.forEach(e => e.el.remove()); enemies.length = 0; // B
-  _lastEnemyTime = null; _nextEnemySpawn = 3 + Math.random() * 3;
+  _lastEnemyTime = null; _nextEnemySpawn = 1.5;
+  bgCurrentScene = -1; // A: シーン切替フラッシュをリセット
   initHpBar(); // E
   laneEls.forEach(l => l.querySelectorAll('.note,.hit-burst,.miss-flash').forEach(e => e.remove()));
   progress.style.width = '0%';
@@ -1956,7 +2148,7 @@ const ENEMY_PIX = [
 const ENEMY_COLORS = [null, '#ff5522', '#222'];
 
 function makeEnemyCanvas() {
-  const s = 3;
+  const s = 4;
   const c = document.createElement('canvas');
   c.width = 8 * s; c.height = 8 * s;
   c.style.cssText = 'position:absolute;pointer-events:none;z-index:3;image-rendering:pixelated;';
@@ -1974,10 +2166,10 @@ function spawnEnemy() {
   const stage = document.getElementById('stage');
   const sw = stage.offsetWidth;
   const fromRight = Math.random() > 0.5;
-  const x = fromRight ? sw + 10 : -34;
-  const speed = 38 + Math.random() * 22;
+  const x = fromRight ? sw + 5 : -37;  // 画面端ギリギリから出現
+  const speed = 45 + Math.random() * 25;
   const vx = fromRight ? -speed : speed;
-  const bottomPx = 44 + Math.floor(Math.random() * 4) * 8;
+  const bottomPx = 48 + Math.floor(Math.random() * 3) * 12;
   const el = makeEnemyCanvas();
   el.style.bottom = bottomPx + 'px';
   el.style.left = '0';
@@ -2407,10 +2599,11 @@ document.getElementById('overlay').addEventListener('touchend', e => {
     draw(c.getContext('2d'), scale, 'normal', 0, 0);
     slot.appendChild(c);
   }
-  makeSmall('overlay-char-slot',    6);
-  makeSmall('result-char-slot',     4);
-  makeSmall('countdown-char-slot',  9);
+  makeSmall('overlay-char-slot',   6);
+  makeSmall('result-char-slot',    4);
+  makeSmall('dialogue-portrait',   5);
   initHpBar();
+  drawBgFrame(); // A: 背景ループ開始
 })();
 
 </script>
